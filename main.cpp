@@ -76,7 +76,7 @@ double Xall,x[3];
 double Xmax,Ymax;
 double Vmax[3],v[3];
 double Amax = 0.1;
-double toPWM = 0.5;
+double toPWM = 118;
 double X=0,Y=0,T=0;
 double Theta,Yaw,Xe,Ye;
 double Vx,Vy,Omega;
