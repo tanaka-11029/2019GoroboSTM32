@@ -245,7 +245,7 @@ int main(int argc,char **argv){
         if(loop.read_ms() > 30){//10msごとに通信して通信量の調節
             now.rotation.x = Vx;//X本来はオドメトリを送る
             now.rotation.y = Vy;//Y
-            now.rotation.z = Place[1]->get();//T
+            now.rotation.z = Omega;//T
             now.rotation.w = Yaw;
             now.translation.x = Speed[0]->getSpeed();
             now.translation.y = Speed[1]->getSpeed();
