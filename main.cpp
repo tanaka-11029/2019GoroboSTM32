@@ -104,7 +104,7 @@ void trigger(){//ボタンを押されたとき
         led.write(0);
         int dummy;
         safe(0,dummy);
-        gy->reset(0);
+        //gy->reset(0);
         X = 0;
         Y = 0;
         T = 0;
@@ -203,7 +203,7 @@ ros::Subscriber<sensor_msgs::Joy> sub("moter",&getData);
 ros::Publisher place("place", &now);
 
 int main(int argc,char **argv){
-    nh.getHardware()->setBaud(460800);//多分最大
+    nh.getHardware()->setBaud(115200);//多分最大
     nh.initNode();
     nh.advertise(place);
     nh.subscribe(sub);
@@ -234,22 +234,22 @@ int main(int argc,char **argv){
         Speed[i]->reset();
         Place[i]->reset();
     }
-    GY521 gyro;
-    gy = &gyro;
+    //GY521 gyro;
+    //gy = &gyro;
     loop.reset();
     led.write(1);
     while(1){
         nh.spinOnce();
-        gyro.updata();//Yaw軸取得
-        Yaw = gyro.yaw;
-        if(loop.read_ms() > 10){//10msごとに通信して通信量の調節
+        //gyro.updata();//Yaw軸取得
+        Yaw = 0;//gyro.yaw;
+        if(loop.read_ms() > 30){//10msごとに通信して通信量の調節
             now.rotation.x = Vx;//X本来はオドメトリを送る
             now.rotation.y = Vy;//Y
-            now.rotation.z = Omega;//T
+            now.rotation.z = Place[1]->get();//T
             now.rotation.w = Yaw;
-            now.translation.x = nowVx;
-            now.translation.y = nowVy;
-            now.translation.z = Speed[0]->getSpeed();
+            now.translation.x = Speed[0]->getSpeed();
+            now.translation.y = Speed[1]->getSpeed();
+            now.translation.z = Speed[2]->getSpeed();
             place.publish(&now);
             loop.reset();
         }
