@@ -1,6 +1,6 @@
 #include <ros.h>
 #include <sensor_msgs/Joy.h>//ジョイスティックのメッセージを流用
-#include <geometry_msgs/Quaternion.h>//よくわかんないけど使いやすそうなので流用
+#include <geometry_msgs/Transform.h>//よくわかんないけど使いやすそうなので流用
 #include "mbed.h"
 #include "ScrpSlave.h"
 #include "RotallyInc.h"
@@ -23,7 +23,7 @@
 #define Ki 0.0000135
 #define Kd 4
 
-#define AMAX 0.01
+#define AMAX 0.354
 #define VMAX 200
 
 const PinName PIN[][3] = {
@@ -71,11 +71,10 @@ bool OK = false;//いっぱい宣言したけどイランやつもあると思�
 bool automove = false;
 bool PID = false;
 double prev_t,diff_t,now_t;
-double Tall,t[3];
-double Xall,x[3];
+double t[3],x[3];
 double Xmax,Ymax;
 double Vmax[3],v[3];
-double Amax = 0.1;
+//double Amax = 0.1;
 double toPWM = 118;
 double X=0,Y=0,T=0;
 double Theta,Yaw,Xe,Ye;
@@ -199,7 +198,7 @@ void getData(const sensor_msgs::Joy &msgs){//メッセージ受信時に呼び�
     }
 }
 
-geometry_msgs::Quaternion now;
+geometry_msgs::Transform now;
 ros::Subscriber<sensor_msgs::Joy> sub("moter",&getData);
 ros::Publisher place("place", &now);
 
@@ -244,10 +243,13 @@ int main(int argc,char **argv){
         gyro.updata();//Yaw軸取得
         Yaw = gyro.yaw;
         if(loop.read_ms() > 10){//10msごとに通信して通信量の調節
-            now.x = Speed[0]->getSpeed();//Vx;//X本来はオドメトリを送る
-            now.y = Vy;//Y
-            now.z = Omega;//T
-            now.w = Yaw;
+            now.rotation.x = Vx;//X本来はオドメトリを送る
+            now.rotation.y = Vy;//Y
+            now.rotation.z = Omega;//T
+            now.rotation.w = Yaw;
+            now.translation.x = nowVx;
+            now.translation.y = nowVy;
+            now.translation.z = Speed[0]->getSpeed();
             place.publish(&now);
             loop.reset();
         }
@@ -259,6 +261,8 @@ int main(int argc,char **argv){
         X += -2/3*diff[0]*sin(Yaw) + 2/3*diff[1]*sin(Yaw-PI_3) + 2/3*diff[2]*sin(Yaw+PI_3);
         Y +=  2/3*diff[0]*cos(Yaw) - 2/3*diff[1]*cos(Yaw-PI_3) - 2/3*diff[2]*cos(Yaw+PI_3);
         T += diff[0]*1/L3 + diff[1]*1/L3 + diff[2]*1/L3;
+        nowVx =  2/3*Speed[0]->getSpeed()*sin(Yaw) - 2/3*Speed[1]->getSpeed()*sin(Yaw-PI_3) - 2/3*Speed[2]->getSpeed()*sin(Yaw+PI_3);
+        nowVy = -2/3*Speed[0]->getSpeed()*cos(Yaw) + 2/3*Speed[1]->getSpeed()*cos(Yaw-PI_3) + 2/3*Speed[2]->getSpeed()*cos(Yaw+PI_3);
         if(automove){
             now_t = (double)autotimer.read_us() / 1000;
             if(PID){//なんとなくのPID制御
@@ -270,8 +274,6 @@ int main(int argc,char **argv){
                 x_error += x_diff * diff_t;
                 y_error += y_diff * diff_t;
                 t_error += t_diff * diff_t;
-                nowVx =  2/3*Speed[0]->getSpeed()*sin(Yaw) - 2/3*Speed[1]->getSpeed()*sin(Yaw-PI_3) - 2/3*Speed[2]->getSpeed()*sin(Yaw+PI_3);
-                nowVy = -2/3*Speed[0]->getSpeed()*cos(Yaw) + 2/3*Speed[1]->getSpeed()*cos(Yaw-PI_3) + 2/3*Speed[2]->getSpeed()*cos(Yaw+PI_3);
                 nowVt = Speed[0]->getSpeed()*1/R3 + Speed[1]->getSpeed()*1/R3 + Speed[2]->getSpeed()*1/R3;
                 if(now_t >= t[1] || abs(Kp*x_diff + Ki*x_error - Kd*nowVx) <= abs(Xmax) || abs(Kp*y_diff + Ki*y_error - Kd*nowVy) <= abs(Ymax)){
                     Vx = Kp*x_diff + Ki*x_error - Kd*nowVx;
@@ -281,8 +283,8 @@ int main(int argc,char **argv){
                     Vy = Ymax;
                 }
                 Omega = Kp*t_diff + Ki*t_error - Kd*nowVt;
-                if(Omega > 100)Omega = 100;
-                else if(Omega < -100)Omega = -100;
+                if(Omega > 50)Omega = 50;
+                else if(Omega < -50)Omega = -50;
                 if(x_diff < 30 && y_diff < 30 && t_diff < PI/90){
                     automove = false;
                     Vx = 0;
@@ -296,8 +298,8 @@ int main(int argc,char **argv){
                         v[i] = toPWM * (Vmax[i]/2*(1-cos(2*Amax*now_t/Vmax[i])));
                         Drive(i,v[i]);
                     }*/
-                    Vx = toPWM * (Xmax/2*(1-cos(2*Amax*now_t/Xmax)));
-                    Vy = toPWM * (Ymax/2*(1-cos(2*Amax*now_t/Ymax)));
+                    Vx = Xmax/2*(1-cos(2*AMAX*now_t/Xmax));
+                    Vy = Ymax/2*(1-cos(2*AMAX*now_t/Ymax));
                     Omega = 0;
                     move();
                 }else{
