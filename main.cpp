@@ -218,7 +218,7 @@ int main(int argc,char **argv){
     }
     for(i = 0;i < 3;i++){
         Place[i] = new RotaryInc(RotaryPin[i][0],RotaryPin[i][1],0);
-        Speed[i] = new RotaryInc(RotaryPin[i+3][0],RotaryPin[i+3][1],5);
+        Speed[i] = new RotaryInc(RotaryPin[i+3][0],RotaryPin[i+3][1],3);
     }
     event.rise(&trigger);
     Timer loop;
