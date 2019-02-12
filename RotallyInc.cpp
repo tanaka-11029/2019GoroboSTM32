@@ -1,18 +1,15 @@
 #include "RotallyInc.h"
 
-RotaryInc::RotaryInc(PinName pinA,PinName pinB,int md){
+RotaryInc::RotaryInc(PinName pinA,PinName pinB,int mode):mode(mode){
     
-    if(md%2 == 1){
+    if(mode%2 == 1){
         measur = true;
-        mode = md - 1;
+        mode -= 1;
         time = new Timer;
-        time->start();
-        call = new Timeout;
-        call->attach(callback(this,&RotaryInc::zero),1);
         startflag = false;
+        flag = false;
     }else{
         measur = false;
-        mode = md;
     }
     
     A = new InterruptIn(pinA,PullUp);
@@ -28,33 +25,48 @@ RotaryInc::RotaryInc(PinName pinA,PinName pinB,int md){
     }else{
         mode = 1;
     }
-    //time->start();
 }
 
 void RotaryInc::zero(){
-    speed = 0;
     time->stop();
     time->reset();
     startflag = false;
+    flag = false;
+    last = pulse;
+    speed = 0;
     count = 0;
+    sum = 0;
+    now = 0;
 }
 
 void RotaryInc::calcu(){
     if(!startflag){
         time->start();
         startflag = true;
+        count = 0;
+    }else if(flag){
+    	now = time->read();
+    	sum -= pre_t[count];
+    	pre_t[count] = now;
+    	sum += now;
+        speed = (double)(pulse - last) / sum;
         last = pulse;
-        count = 1;
-        call->attach(callback(this,&RotaryInc::zero),1);
-    }else if(count >= 20){
-        speed = (double)(pulse - last) / (time->read());
-        last = pulse;
-        count = 1;
+        if(count < 19){
+        	count++;
+        }else{
+        	count = 0;
+        }
         time->reset();
     }else{
-        call->detach();
+    	now = time->read();
+    	pre_t[count] = now;
+    	sum += now;
         count++;
-        call->attach(callback(this,&RotaryInc::zero),1);
+        if(count > 19){
+        	count = 0;
+        	flag = true;
+        }
+        time->reset();
     }
 }
 
@@ -83,6 +95,10 @@ long long RotaryInc::get(){
 }
 
 double RotaryInc::getSpeed(){
+	if(!measur)return 0;
+	if(time->read_ms() > 500){
+		zero();
+	}
     return speed / 256 / mode * 314.159265359;//2piR
 }
 
@@ -95,8 +111,7 @@ int RotaryInc::diff(){
 void RotaryInc::reset(){
     pulse = 0;
     prev = 0;
-    last = 0;
-    if(measur)time->reset();
+    if(measur)zero();
 }
 
 RotaryInc::~RotaryInc(){
@@ -104,8 +119,7 @@ RotaryInc::~RotaryInc(){
     B->disable_irq();
     delete A;
     delete B;
-    if(speed){
+    if(measur){
         delete time;
-        delete call;
     }
-}    
+}

@@ -67,6 +67,7 @@ Timer autotimer;
 
 ros::NodeHandle nh;
 
+int j;
 bool OK = false;//いっぱい宣言したけどイランやつもあると思う
 bool automove = false;
 bool PID = false;
@@ -74,6 +75,7 @@ double prev_t,diff_t,now_t;
 double t[3],x[3];
 double Xmax,Ymax;
 double Vmax[3],v[3];
+double delta[3];
 //double Amax = 0.1;
 double toPWM = 118;
 double X=0,Y=0,T=0;
@@ -83,6 +85,7 @@ double Vd[3],nowVx,nowVy,nowVt;
 double diff[3];
 double x_error,y_error,t_error;
 double x_diff,y_diff,t_diff;
+double driveV[3];
 
 bool safe(int rx_data,int &tx_data){//言わずもがな止める
     Vx = 0;
@@ -131,9 +134,12 @@ bool Drive(int id,int pwm){//モーターを回す
 }
 
 void move(){//X,Y,Omegaから３つのモーターのPWMに変換する
-    Drive(0,Vx*sin(Yaw)         - Vy*cos(Yaw)         + Omega);
-    Drive(1,Vx*sin(Yaw + PI2_3) - Vy*cos(Yaw + PI2_3) + Omega);
-    Drive(2,Vx*sin(Yaw - PI2_3) - Vy*cos(Yaw - PI2_3) + Omega);
+	driveV[0] = Vx*sin(Yaw)         - Vy*cos(Yaw)         + Omega;
+	driveV[1] = Vx*sin(Yaw + PI2_3) - Vy*cos(Yaw + PI2_3) + Omega;
+	driveV[2] = Vx*sin(Yaw - PI2_3) - Vy*cos(Yaw - PI2_3) + Omega;
+	for(j = 0;j < 3;j++){
+		Drive(j,driveV[j] + (driveV[j] - toPWM * Speed[j]->getSpeed()));
+	}
 }
 
 void getData(const sensor_msgs::Joy &msgs){//メッセージ受信時に呼び出される
@@ -217,7 +223,7 @@ int main(int argc,char **argv){
     }
     for(i = 0;i < 3;i++){
         Place[i] = new RotaryInc(RotaryPin[i][0],RotaryPin[i][1],0);
-        Speed[i] = new RotaryInc(RotaryPin[i+3][0],RotaryPin[i+3][1],3);
+        Speed[i] = new RotaryInc(RotaryPin[i+3][0],RotaryPin[i+3][1],1);
     }
     event.rise(&trigger);
     Timer loop;

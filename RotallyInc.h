@@ -3,7 +3,7 @@
 
 class RotaryInc{
 public:
-    RotaryInc(PinName userA, PinName userB,int mode);
+    RotaryInc(PinName userA, PinName userB,int mode = 0);
     ~RotaryInc();
     long long get();
     double getSpeed();
@@ -13,16 +13,19 @@ public:
 private:
     InterruptIn *A,*B;
     Timer *time;
-    Timeout *call;
     long long pulse;
     long long last;
     long long prev;
     int spend;
     int count;
     int mode;
+    double now;
+    double sum;
+    double pre_t[20];
     double speed;
     bool measur;
     bool startflag;
+    bool flag;
     void riseA(void);
     void riseB(void);
     void fallA(void);
