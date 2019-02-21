@@ -26,6 +26,8 @@
 #define AMAX 0.354
 #define VMAX 200
 
+#define toPWM 118
+
 const PinName PIN[][3] = {
     {PB_14,PB_13,PB_15},//入れ替えた
     {PA_11 ,PB_1,PB_2 },
@@ -56,7 +58,7 @@ const PinName SolenoidPin[] = {
 InterruptIn event(PC_13);
 DigitalOut led(PA_5);
 
-ScrpSlave arduino(S_411,0x0807ffff);
+ScrpSlave arduino(PC_12,PD_2,PA_13,0x0807ffff);
 
 PwmOut* Moter[7][2];
 DigitalOut* Led[7];
@@ -77,7 +79,6 @@ double Xmax,Ymax;
 double Vmax[3],v[3];
 double delta[3];
 //double Amax = 0.1;
-double toPWM = 118;
 double X=0,Y=0,T=0;
 double Theta,Yaw,Xe,Ye;
 double Vx,Vy,Omega;

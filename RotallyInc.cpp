@@ -46,6 +46,7 @@ void RotaryInc::calcu(){
         count = 0;
     }else if(flag){
     	now = time->read();
+        time->reset();
     	sum -= pre_t[count];
     	pre_t[count] = now;
     	sum += now;
@@ -56,9 +57,9 @@ void RotaryInc::calcu(){
         }else{
         	count = 0;
         }
-        time->reset();
     }else{
     	now = time->read();
+        time->reset();
     	pre_t[count] = now;
     	sum += now;
         count++;
@@ -66,7 +67,6 @@ void RotaryInc::calcu(){
         	count = 0;
         	flag = true;
         }
-        time->reset();
     }
 }
 
