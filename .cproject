@@ -136,7 +136,7 @@
 									<listOptionValue builtIn="false" value="${ProjDirPath}/mbed_config.h"/>
 								</option>
 								<option id="gnu.c.compiler.option.dialect.std.478763785" name="Language standard" superClass="gnu.c.compiler.option.dialect.std" value="gnu.c.compiler.dialect.gnu99" valueType="enumerated"/>
-								<option id="gnu.c.compiler.option.dialect.std.463509840" name="Language standard" superClass="gnu.c.compiler.option.dialect.std" useByScannerDiscovery="true" value="gnu.c.compiler.dialect.c99" valueType="enumerated"/>
+								<option id="gnu.c.compiler.option.dialect.std.463509840" name="Language standard" superClass="gnu.c.compiler.option.dialect.std" useByScannerDiscovery="true" value="gnu.c.compiler.dialect.c11" valueType="enumerated"/>
 								<option id="gnu.c.compiler.option.warnings.extrawarn.633827978" name="Extra warnings (-Wextra)" superClass="gnu.c.compiler.option.warnings.extrawarn" useByScannerDiscovery="false" value="true" valueType="boolean"/>
 								<option id="fr.ac6.managedbuild.tool.gnu.cross.c.compiler.fdata.909441864" name="Place the data in their own section (-fdata-sections)" superClass="fr.ac6.managedbuild.tool.gnu.cross.c.compiler.fdata" useByScannerDiscovery="false" value="true" valueType="boolean"/>
 								<option id="fr.ac6.managedbuild.tool.gnu.cross.c.compiler.ffunction.570086108" name="Place the function in their own section (-ffunction-sections)" superClass="fr.ac6.managedbuild.tool.gnu.cross.c.compiler.ffunction" useByScannerDiscovery="false" value="true" valueType="boolean"/>
@@ -257,7 +257,7 @@
 								<option id="gnu.cpp.compiler.option.include.files.018170788" name="Include files (-include)" superClass="gnu.cpp.compiler.option.include.files" useByScannerDiscovery="false" valueType="includeFiles">
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/mbed_config.h}&quot;"/>
 								</option>
-								<option id="gnu.cpp.compiler.option.dialect.std.339412003" name="Language standard" superClass="gnu.cpp.compiler.option.dialect.std" useByScannerDiscovery="true" value="gnu.cpp.compiler.dialect.gnu99" valueType="enumerated"/>
+								<option id="gnu.cpp.compiler.option.dialect.std.339412003" name="Language standard" superClass="gnu.cpp.compiler.option.dialect.std" useByScannerDiscovery="true" value="gnu.cpp.compiler.dialect.default" valueType="enumerated"/>
 								<option id="gnu.cpp.compiler.option.warnings.allwarn.691077349" name="All warnings (-Wall)" superClass="gnu.cpp.compiler.option.warnings.allwarn" useByScannerDiscovery="false" value="true" valueType="boolean"/>
 								<option id="gnu.cpp.compiler.option.warnings.extrawarn.937215697" name="Extra warnings (-Wextra)" superClass="gnu.cpp.compiler.option.warnings.extrawarn" useByScannerDiscovery="false" value="true" valueType="boolean"/>
 								<option id="fr.ac6.managedbuild.tool.gnu.cross.cpp.compiler.fdata.472836790" name="Place the data in their own section (-fdata-sections)" superClass="fr.ac6.managedbuild.tool.gnu.cross.cpp.compiler.fdata" useByScannerDiscovery="false" value="true" valueType="boolean"/>

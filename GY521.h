@@ -9,14 +9,10 @@ enum GY521RegisterMap {
   FS_SEL = 0x1B,
   AFS_SEL = 0x1C,
   ACCEL_XOUT_H = 0x3B,
-  ACCEL_XOUT_L = 0x3C,
   ACCEL_YOUT_H = 0x3D,
-  ACCEL_YOUT_L = 0x3E,
   ACCEL_ZOUT_H = 0x3F,
-  ACCEL_ZOUT_L = 0x40,
   //TEMPERATURE  = 0x41,
-  GYRO_ZOUT_H = 0x47,
-  GYRO_ZOUT_L = 0x48
+  GYRO_ZOUT_H = 0x47
 };
 
 class GY521{

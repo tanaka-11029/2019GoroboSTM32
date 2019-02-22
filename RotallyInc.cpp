@@ -32,7 +32,7 @@ void RotaryInc::zero(){
     time->reset();
     startflag = false;
     flag = false;
-    last = pulse;
+    last[0] = pulse;
     speed = 0;
     count = 0;
     sum = 0;
@@ -50,8 +50,8 @@ void RotaryInc::calcu(){
     	sum -= pre_t[count];
     	pre_t[count] = now;
     	sum += now;
-        speed = (double)(pulse - last) / sum;
-        last = pulse;
+        speed = (double)(pulse - last[count]) / sum;
+        last[count] = pulse;
         if(count < 19){
         	count++;
         }else{
@@ -60,6 +60,7 @@ void RotaryInc::calcu(){
     }else{
     	now = time->read();
         time->reset();
+        last[count] = pulse;
     	pre_t[count] = now;
     	sum += now;
         count++;
@@ -99,7 +100,7 @@ double RotaryInc::getSpeed(){
 	if(time->read_ms() > 500){
 		zero();
 	}
-    return speed / 256 / mode * 314.159265359;//2piR
+    return speed / 256 / mode * 319.185813605;//2piR
 }
 
 int RotaryInc::diff(){

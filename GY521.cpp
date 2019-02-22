@@ -1,28 +1,28 @@
 #include "GY521.h"
 
 GY521::GY521(int bit,int calibration,double user_reg){
-    dev_id = 0x68;
+    dev_id = 0x68 << 1;
     i2c = new I2C(PB_3,PB_10);
     char check;
     char data[2] = {WHO_AM_I,0x00};
-    i2c->write(dev_id << 1,data,1,true);
-    i2c->read(dev_id << 1,&check,1);
-    if(check == dev_id){
+    i2c->write(dev_id,data,1,true);
+    i2c->read(dev_id,&check,1);
+    if(check == dev_id >> 1){
         data[0] = PWR_MGMT_1;
-        i2c->write(dev_id << 1,data,1,true);
-        i2c->read(dev_id << 1,&check,1);
+        i2c->write(dev_id,data,1,true);
+        i2c->read(dev_id,&check,1);
         if(check == 0x40){
-            i2c->write(dev_id << 1,data,2);
+            i2c->write(dev_id,data,2);
         }
     }
     data[0] = LPF;
     data[1] = 0x00;
-    i2c->write(dev_id << 1,data,2);    
+    i2c->write(dev_id,data,2);
     short accel_x_now = 0,accel_y_now = 0,accel_z_now = 0;
     double accel_x_aver = 0, accel_y_aver = 0, accel_z_aver = 0;
     data[0] = AFS_SEL;
     data[1] = 0x00;
-    i2c->write(dev_id << 1,data,2);
+    i2c->write(dev_id,data,2);
     for (int i = 0; i < calibration; ++i) {
         accel_x_now = gyroRead2(ACCEL_XOUT_H);
         accel_y_now = gyroRead2(ACCEL_YOUT_H);
@@ -37,7 +37,7 @@ GY521::GY521(int bit,int calibration,double user_reg){
     double gyro_reg = hypot(hypot(accel_x_aver, accel_y_aver), accel_z_aver) / accel_z_aver;
     data[0] = FS_SEL;
     data[1] = bit << 3;
-    i2c->write(dev_id << 1,data,2);
+    i2c->write(dev_id,data,2);
     bit_ = bit;
     gyro_LSB = GY521_LSB_MAP[bit_] / gyro_reg / user_reg;
     
@@ -58,8 +58,7 @@ void GY521::updata(){
     if(flag)return;
     short gyro_z_now_ = gyroRead2(GYRO_ZOUT_H);
     gyro_z_now = ((double)gyro_z_now_ - gyro_z_aver) / gyro_LSB;
-    diffyaw = (gyro_z_now + gyro_z_prev) / 2 *
-                ((double)time.read_us()/1000000);
+    diffyaw = (gyro_z_now + gyro_z_prev) / 2 * ((double)time.read_us()/1000000);
     time.reset();
     yaw += diffyaw;
     gyro_z_prev = gyro_z_now;
@@ -98,7 +97,7 @@ double GY521::checkStatus(int mode) {
 int16_t GY521::gyroRead2(enum GY521RegisterMap reg) {
     char data[2];
     char addr = reg;
-    i2c->write(dev_id<<1,&addr,1,true);
-    i2c->read(dev_id<<1,data,2);
+    i2c->write(dev_id,&addr,1,true);
+    i2c->read(dev_id,data,2);
     return (data[0] << 8) + data[1];
 }

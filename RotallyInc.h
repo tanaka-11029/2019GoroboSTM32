@@ -14,7 +14,7 @@ private:
     InterruptIn *A,*B;
     Timer *time;
     long long pulse;
-    long long last;
+    long long last[20];
     long long prev;
     int spend;
     int count;

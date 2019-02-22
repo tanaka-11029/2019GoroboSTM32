@@ -9,7 +9,7 @@
 #define MAXPWM 240
 #define M_NUM 7
 
-#define R 314.159265359//タイヤの直径 * PI
+#define R 319.185813605//タイヤの直径 * PI
 #define R3 1110//本体の中心からタイヤへの長さの3倍
 #define L 260
 #define L3 780
@@ -20,13 +20,13 @@
 #define PI2_3 2.09439510239
 
 #define Kp 0.0175
-#define Ki 0.0000135
-#define Kd 4
+#define Ki 0//0.0000135
+#define Kd 0//4
 
 #define AMAX 0.354
 #define VMAX 200
 
-#define toPWM 118
+#define toPWM 0.58
 
 const PinName PIN[][3] = {
     {PB_14,PB_13,PB_15},//入れ替えた
@@ -46,7 +46,7 @@ const PinName RotaryPin[6][2] = {
     {PA_7 ,PA_6 },//入れ替えた
     {PA_15,PA_14},
     {PA_9 ,PA_8 },
-    {PC_0 ,PC_1 },
+    {PC_11 ,PC_10 },
     {PC_3 ,PC_2 },
     {PC_5 ,PA_12}
 };
@@ -108,7 +108,7 @@ void trigger(){//ボタンを押されたとき
         led.write(0);
         int dummy;
         safe(0,dummy);
-        //gy->reset(0);
+        gy->reset(0);
         X = 0;
         Y = 0;
         T = 0;
@@ -241,14 +241,14 @@ int main(int argc,char **argv){
         Speed[i]->reset();
         Place[i]->reset();
     }
-    //GY521 gyro;
-    //gy = &gyro;
+    GY521 gyro;
+    gy = &gyro;
     loop.reset();
     led.write(1);
     while(1){
         nh.spinOnce();
-        //gyro.updata();//Yaw軸取得
-        Yaw = 0;//gyro.yaw;
+        gyro.updata();//Yaw軸取得
+        Yaw = gyro.yaw;
         if(loop.read_ms() > 30){//10msごとに通信して通信量の調節
             now.rotation.x = Vx;//X本来はオドメトリを送る
             now.rotation.y = Vy;//Y
