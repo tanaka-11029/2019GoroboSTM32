@@ -97,7 +97,7 @@ long long RotaryInc::get(){
 
 double RotaryInc::getSpeed(){
 	if(!measur)return 0;
-	if(time->read_ms() > 500){
+	if(time->read_ms() > 250){
 		zero();
 	}
     return speed / 256 / mode * 319.185813605;//2piR
