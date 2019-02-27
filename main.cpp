@@ -161,9 +161,9 @@ void move(){//X,Y,Omegaから３つのモーターのPWMに変換する
 				errer[j] = 0;
 			}else if(driveMS[j] != lastVMS[j]){
 				lastVMS[j] = driveMS[j];
-				kp = 1.5 / driveMS[j];
-				ki = 1300.0 / driveMS[j] / driveMS[j];
-				kd = 0.0004;
+				kp = 2.0;//要修正
+				ki = 60;
+				kd = 0.0135;
 			}
 			nowV[j] = Speed[j]->getSpeed();
 			diff[j] = driveMS[j] - nowV[j];
@@ -254,7 +254,7 @@ int main(int argc,char **argv){
     nh.initNode();
     nh.advertise(place);
     nh.subscribe(sub);
-    now.data_length = 10;
+    now.data_length = 2;
     now.data = (float *)malloc(sizeof(float)*now.data_length);
     int i;
     double diff[3],Pspeed[3];
@@ -293,17 +293,17 @@ int main(int argc,char **argv){
         nh.spinOnce();
         gyro.updata();//Yaw軸取得
         Yaw = gyro.yaw;
-        if(loop.read_ms() > 100){//10msごとに通信して通信量の調節
+        if(loop.read_ms() > 5){//10msごとに通信して通信量の調節
             now.data[0] = driveV[0];//X本来はオドメトリを送る
-            now.data[1] = driveV[1];//Y
+            /*now.data[1] = driveV[1];//Y
             now.data[2] = driveV[2];//T
             now.data[3] = Yaw;
             now.data[4] = X;//mm/s
             now.data[5] = Y;
-            now.data[6] = T;
-            now.data[7] = nowV[0];
+            now.data[6] = T;*/
+            now.data[1] = nowV[0];/*
             now.data[8] = nowV[1];
-            now.data[9] = nowV[2];
+            now.data[9] = nowV[2];*/
             place.publish(&now);
             loop.reset();
         }
