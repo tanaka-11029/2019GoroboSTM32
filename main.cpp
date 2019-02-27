@@ -13,7 +13,7 @@
 #define R3 1110//本体の中心からタイヤへの長さの3倍
 #define L 260
 #define L3 780//中心から計測輪への半径の3倍
-#define PI    3.14159265359
+#define PI    M_PI
 #define PI_2  M_PI_2
 #define PI_3  1.047197551196
 #define PI_6  0.523598775598
@@ -23,8 +23,8 @@
 #define Ki 0//0.0000135
 #define Kd 0//4
 
-#define AMAX 1000
-#define VMAX 4400
+#define AMAX 500.0
+#define VMAX 4400.0
 
 #define toPWM(a) (-0.0000037647 * a + 0.0665647)
 
@@ -67,7 +67,7 @@ DigitalOut* Led[7];
 RotaryInc* Speed[3];
 RotaryInc* Place[3];
 GY521 *gy;
-Timer autotimer;
+Timer autotimer,motertimer;
 
 ros::NodeHandle nh;
 
@@ -77,6 +77,7 @@ bool OK = false;//いっぱい宣言したけどイランやつもあると思�
 bool automove = false;
 bool PID = false;
 bool drivebyms = false;
+bool movePID = false;
 double prev_t,diff_t,now_t;
 double t[3],x[3];
 double Xmax,Ymax;
@@ -89,7 +90,7 @@ double Vx,Vy,Omega;
 double Vd[3],nowVx,nowVy,nowVt;
 double x_error,y_error,t_error;
 double x_diff,y_diff,t_diff;
-double driveV[3];
+double driveV[3],nowV[3];
 
 bool safe(int rx_data,int &tx_data){//言わずもがな止める
 	if(drivebyms)drivebyms = false;
@@ -141,21 +142,36 @@ bool Drive(int id,int pwm){//モーターを回す
 }
 
 void move(){//X,Y,Omegaから３つのモーターのPWMに変換する
-	static double diff[3],errer[3];
+	static double diff[3],errer[3],diffV[3],lastV[3];
+	static double now_t,kp,ki,kd,lastVMS[3];
 	if(!drivebyms){
-		driveMS[0] = Vx*sin(Yaw)         - Vy*cos(Yaw)         + Omega;
-		driveMS[1] = Vx*sin(Yaw + PI2_3) - Vy*cos(Yaw + PI2_3) + Omega;
-		driveMS[2] = Vx*sin(Yaw - PI2_3) - Vy*cos(Yaw - PI2_3) + Omega;
+		driveMS[0] = Vx*cos(Yaw)         + Vy*sin(Yaw)         + Omega;
+		driveMS[1] = Vx*cos(Yaw + PI2_3) + Vy*sin(Yaw + PI2_3) + Omega;
+		driveMS[2] = Vx*cos(Yaw - PI2_3) + Vy*sin(Yaw - PI2_3) + Omega;
+	}
+	if(movePID){
+		now_t = motertimer.read();
+		motertimer.reset();
 	}
 	for(j = 0;j < 3;j++){
-		if(driveMS[j] == 0){
-			driveMS[j] = 0;
-			diff[j] = 0;
-			errer[j] = 0;
+		if(movePID){
+			if(driveMS[j] == 0){
+				driveMS[j] = 0;
+				diff[j] = 0;
+				errer[j] = 0;
+			}else if(driveMS[j] != lastVMS[j]){
+				lastVMS[j] = driveMS[j];
+				kp = 1.5 / driveMS[j];
+				ki = 1300.0 / driveMS[j] / driveMS[j];
+				kd = 0.0004;
+			}
+			nowV[j] = Speed[j]->getSpeed();
+			diff[j] = driveMS[j] - nowV[j];
+			errer[j] += diff[j] * now_t;
+			diffV[j] = (nowV[j] - lastV[j]) / now_t;
+			lastV[j] = nowV[j];
+			driveV[j] =  driveMS[j] + (diff[j] * kp + errer[j] * ki - diffV[j] * kd);
 		}
-		diff[j] = driveMS[j] - Speed[j]->getSpeed();
-		errer[j] += diff[j];
-		driveV[j] =  driveMS[j] + diff[j] * 0.7 +errer[j] * 0.0002;
 		Drive(j,toPWM(driveV[j]) * driveV[j]);
 	}
 }
@@ -171,6 +187,7 @@ void getData(const sensor_msgs::Joy &msgs){//メッセージ受信時に呼び�
         case 0://手動走行
             automove = false;
             autotimer.stop();
+            movePID = true;
         	if(drivebyms)drivebyms = false;
             Vx = (double)msgs.buttons[1];
             Vy = (double)msgs.buttons[2];
@@ -179,6 +196,7 @@ void getData(const sensor_msgs::Joy &msgs){//メッセージ受信時に呼び�
             break;
         case 10:
         	if(!drivebyms)drivebyms = true;
+        	if(!movePID)movePID = true;
             driveMS[0] = msgs.buttons[1];
             driveMS[1] = msgs.buttons[2];
             driveMS[2] = msgs.buttons[3];
@@ -269,40 +287,41 @@ int main(int argc,char **argv){
     GY521 gyro;
     gy = &gyro;
     loop.reset();
+    motertimer.start();
     led.write(1);
     while(1){
         nh.spinOnce();
         gyro.updata();//Yaw軸取得
         Yaw = gyro.yaw;
         if(loop.read_ms() > 100){//10msごとに通信して通信量の調節
-            now.data[0] = X;//X本来はオドメトリを送る
-            now.data[1] = Y;//Y
-            now.data[2] = T;//T
+            now.data[0] = driveV[0];//X本来はオドメトリを送る
+            now.data[1] = driveV[1];//Y
+            now.data[2] = driveV[2];//T
             now.data[3] = Yaw;
-            now.data[4] = nowVx;//mm/s
-            now.data[5] = nowVy;
-            now.data[6] = nowVt;
-            now.data[7] = diff[0];
-            now.data[8] = diff[1];
-            now.data[9] = diff[2];
+            now.data[4] = X;//mm/s
+            now.data[5] = Y;
+            now.data[6] = T;
+            now.data[7] = nowV[0];
+            now.data[8] = nowV[1];
+            now.data[9] = nowV[2];
             place.publish(&now);
             loop.reset();
         }
         Yaw *= 0.0174532925199432;//pi/180
         move();//モーターの状態を更新
         for(i = 0;i<3;++i){
-            diff[i] = Place[i]->diff() / 256 * R;
+            diff[i] = Place[i]->diff() / 256.0 * R;
             Pspeed[i] = Place[i]->getSpeed();
         }//オドメトリ計算
-        X += -2/3*diff[0]*sin(Yaw) + 2/3*diff[1]*sin(Yaw-PI_3) + 2/3*diff[2]*sin(Yaw+PI_3);
-        Y +=  2/3*diff[0]*cos(Yaw) - 2/3*diff[1]*cos(Yaw-PI_3) - 2/3*diff[2]*cos(Yaw+PI_3);
-        T += diff[0]*1/L3 + diff[1]*1/L3 + diff[2]*1/L3;
-        //nowVx =  2/3*Speed[0]->getSpeed()*sin(Yaw) - 2/3*Speed[1]->getSpeed()*sin(Yaw-PI_3) - 2/3*Speed[2]->getSpeed()*sin(Yaw+PI_3);
-        //nowVy = -2/3*Speed[0]->getSpeed()*cos(Yaw) + 2/3*Speed[1]->getSpeed()*cos(Yaw-PI_3) + 2/3*Speed[2]->getSpeed()*cos(Yaw+PI_3);
+        X += -2.0/3.0*diff[0]*cos(Yaw) + 2.0/3.0*diff[1]*cos(Yaw-PI_3) + 2.0/3.0*diff[2]*cos(Yaw+PI_3);
+        Y += -2.0/3.0*diff[0]*sin(Yaw) + 2.0/3.0*diff[1]*sin(Yaw-PI_3) + 2.0/3.0*diff[2]*sin(Yaw+PI_3);
+        T +=  diff[0]*1/L3 + diff[1]*1/L3 + diff[2]*1/L3;
+        //nowVx =  2.0/3.0*Speed[0]->getSpeed()*sin(Yaw) - 2.0/3.0*Speed[1]->getSpeed()*sin(Yaw-PI_3) - 2.0/3.0*Speed[2]->getSpeed()*sin(Yaw+PI_3);
+        //nowVy = -2.0/3.0*Speed[0]->getSpeed()*cos(Yaw) + 2.0/3.0*Speed[1]->getSpeed()*cos(Yaw-PI_3) + 2.0/3.0*Speed[2]->getSpeed()*cos(Yaw+PI_3);
         //nowVt = Speed[0]->getSpeed()*1/R3 + Speed[1]->getSpeed()*1/R3 + Speed[2]->getSpeed()*1/R3;
-        nowVx = -2/3*Pspeed[0]*sin(Yaw) + 2/3*Pspeed[1]*sin(Yaw-PI_3) + 2/3*Pspeed[2]*sin(Yaw+PI_3);
-        nowVy =  2/3*Pspeed[0]*cos(Yaw) - 2/3*Pspeed[1]*cos(Yaw-PI_3) - 2/3*Pspeed[2]*cos(Yaw+PI_3);
-        nowVt = Pspeed[0]*1/L3 + Pspeed[1]*1/L3 + Pspeed[2]*1/L3;
+        nowVx = -2.0/3.0*Pspeed[0]*cos(Yaw) + 2.0/3.0*Pspeed[1]*cos(Yaw-PI_3) + 2.0/3.0*Pspeed[2]*cos(Yaw+PI_3);
+        nowVy = -2.0/3.0*Pspeed[0]*sin(Yaw) + 2.0/3.0*Pspeed[1]*sin(Yaw-PI_3) + 2.0/3.0*Pspeed[2]*sin(Yaw+PI_3);
+        nowVt =  Pspeed[0]*1/L3 + Pspeed[1]*1/L3 + Pspeed[2]*1/L3;
         if(automove){
         	if(drivebyms)drivebyms = false;
             now_t = (double)autotimer.read_us() / 1000000;
@@ -317,11 +336,17 @@ int main(int argc,char **argv){
                 t_error += t_diff * diff_t;
                 Vx = Kp*x_diff + Ki*x_error - Kd*nowVx;
                 Vy = Kp*y_diff + Ki*y_error - Kd*nowVy;
-                if(abs(Vx) > abs(Xmax)){
+                if(fabs(Vx) > fabs(Xmax)){
+                	if(!movePID)movePID = true;
                     Vx = Xmax;
+                }else{
+                	if(movePID)movePID = false;
                 }
-                if(abs(Vy) > abs(Ymax)){
+                if(fabs(Vy) > fabs(Ymax)){
+                	if(!movePID)movePID = true;
                     Vy = Ymax;
+                }else{
+                	if(movePID)movePID = false;
                 }
                 Omega = Kp*t_diff + Ki*t_error - Kd*nowVt;
                 if(Omega > 50)Omega = 50;
@@ -339,8 +364,9 @@ int main(int argc,char **argv){
                         v[i] = toPWM * (Vmax[i]/2*(1-cos(2*Amax*now_t/Vmax[i])));
                         Drive(i,v[i]);
                     }*/
-                    Vx = Xmax/2*(1-cos(2*AMAX*now_t/Xmax));
-                    Vy = Ymax/2*(1-cos(2*AMAX*now_t/Ymax));
+                	if(movePID)movePID = false;
+                    Vx = Xmax/2.0*(1-cos(2.0*AMAX*now_t/Xmax));
+                    Vy = Ymax/2.0*(1-cos(2.0*AMAX*now_t/Ymax));
                     Omega = 0;
                     //move();
                 }else{
