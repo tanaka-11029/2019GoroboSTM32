@@ -1,6 +1,5 @@
 #include <ros.h>
-#include <sensor_msgs/Joy.h>//ジョイスティックのメッセージを流用
-#include <std_msgs/Float32MultiArray.h>//ダブル型データの配列メッセージ
+#include <std_msgs/Float32MultiArray.h>//フロート型データの配列メッセージ
 #include "mbed.h"
 #include "ScrpSlave.h"
 #include "RotallyInc.h"
@@ -83,7 +82,6 @@ double t[3],x[3];
 double Xmax,Ymax;
 double Vmax[3],v[3];
 double delta[3];
-//double Amax = 0.1;
 double X=0,Y=0,T=0;
 double Theta,Yaw,Xe,Ye;
 double Vx,Vy,Omega;
@@ -123,27 +121,28 @@ void trigger(){//ボタンを押されたとき
     }
 }
 
-bool Drive(int id,int pwm){//モーターを回す
-    pwm = min(max(-MAXPWM,pwm),MAXPWM);
+bool Drive(int id,float pwm){//モーターを回す
+    pwm = fmin(fmax(-MAXPWM,pwm),MAXPWM);
     if(!pwm){
         Moter[id][0]->write(0);
         Moter[id][1]->write(0);
         Led[id]->write(0);
     }else if(0 < pwm){
-        Moter[id][0]->write((float)pwm/255);
+        Moter[id][0]->write(pwm/255);
         Moter[id][1]->write(0);
         Led[id]->write(1);
     }else{
         Moter[id][0]->write(0);
-        Moter[id][1]->write((float)-pwm/255);
+        Moter[id][1]->write(-pwm/255);
         Led[id]->write(1);
     }
     return true;
 }
-
+int Period;
 void move(){//X,Y,Omegaから３つのモーターのPWMに変換する
-	static double diff[3],errer[3],diffV[3],lastV[3];
-	static double now_t,kp,ki,kd,lastVMS[3];
+	static double kp = 0.6,ki = 20.0,kd = 0.01;//要修正
+	static double diff[3],errer[3],diffV[3],lastV[3],now_t;
+	static bool flag;
 	if(!drivebyms){
 		driveMS[0] = Vx*cos(Yaw)         + Vy*sin(Yaw)         + Omega;
 		driveMS[1] = Vx*cos(Yaw + PI2_3) + Vy*sin(Yaw + PI2_3) + Omega;
@@ -159,13 +158,15 @@ void move(){//X,Y,Omegaから３つのモーターのPWMに変換する
 				driveMS[j] = 0;
 				diff[j] = 0;
 				errer[j] = 0;
-			}else if(driveMS[j] != lastVMS[j]){
-				lastVMS[j] = driveMS[j];
-				kp = 2.0;//要修正
-				ki = 60;
-				kd = 0.0135;
 			}
 			nowV[j] = Speed[j]->getSpeed();
+			/*if(nowV[j] > lastV[j] && flag && j == 0){
+				Period = motertimer.read_us();
+				motertimer.reset();
+				flag = false;
+			}else if(nowV[j] < lastV[j] && !flag && j == 0){
+				flag = true;
+			}*/
 			diff[j] = driveMS[j] - nowV[j];
 			errer[j] += diff[j] * now_t;
 			diffV[j] = (nowV[j] - lastV[j]) / now_t;
@@ -176,8 +177,8 @@ void move(){//X,Y,Omegaから３つのモーターのPWMに変換する
 	}
 }
 
-void getData(const sensor_msgs::Joy &msgs){//メッセージ受信時に呼び出される
-    switch(msgs.buttons[0]){//Joyメッセージの最初のint方データをヘッダーとして使う
+void getData(const std_msgs::Float32MultiArray &msgs){//メッセージ受信時に呼び出される
+    switch((int)msgs.data[0]){//メッセージの最初のデータをヘッダーとして使う
     	case -30:
     		safe(0,dummy);
     		break;
@@ -185,33 +186,33 @@ void getData(const sensor_msgs::Joy &msgs){//メッセージ受信時に呼び�
             trigger();
             break;
         case 0://手動走行
-            automove = false;
             autotimer.stop();
             movePID = true;
         	if(drivebyms)drivebyms = false;
-            Vx = (double)msgs.buttons[1];
-            Vy = (double)msgs.buttons[2];
-            Omega = (double)msgs.buttons[3];
+            if(automove)automove = false;
+            Vx = msgs.data[1];
+            Vy = msgs.data[2];
+            Omega = msgs.data[3];
             //move();
             break;
         case 10:
         	if(!drivebyms)drivebyms = true;
         	if(!movePID)movePID = true;
-            driveMS[0] = msgs.buttons[1];
-            driveMS[1] = msgs.buttons[2];
-            driveMS[2] = msgs.buttons[3];
+            driveMS[0] = msgs.data[1];
+            driveMS[1] = msgs.data[2];
+            driveMS[2] = msgs.data[3];
             break;
         case 18://S字加速->PID減速及び微調整
-            t[0] = msgs.axes[0];//加速時間
-            t[1] = msgs.axes[1];//加速時間＋並行走行時間
-            Xmax = msgs.axes[2];//X軸方向の最大速度
-            Ymax = msgs.axes[3];//Y軸方向の最大速度
-            Xe = msgs.axes[4];//目標X軸
-            Ye = msgs.axes[5];//目標Y軸
-            Theta = msgs.axes[6];//目標向き
-            /*Vmax[0] = msgs.axes[7];//モーター1の最大速度
-            Vmax[1] = msgs.axes[8];//モーター2の最大速度
-            Vmax[2] = msgs.axes[9];//モーター3の最大速度*/
+            t[0] = msgs.data[1];//加速時間
+            t[1] = msgs.data[2];//加速時間＋並行走行時間
+            Xmax = msgs.data[3];//X軸方向の最大速度
+            Ymax = msgs.data[4];//Y軸方向の最大速度
+            Xe = msgs.data[5];//目標X軸
+            Ye = msgs.data[6];//目標Y軸
+            Theta = msgs.data[6];//目標向き
+            /*Vmax[0] = msgs.data[7];//モーター1の最大速度
+            Vmax[1] = msgs.data[8];//モーター2の最大速度
+            Vmax[2] = msgs.data[9];//モーター3の最大速度*/
             x_error = 0;
             y_error = 0;
             t_error = 0;
@@ -223,9 +224,9 @@ void getData(const sensor_msgs::Joy &msgs){//メッセージ受信時に呼び�
             autotimer.start();
             break;
         case 19://PIDだけ
-            Xe = msgs.axes[0];
-            Ye = msgs.axes[1];
-            Theta = msgs.axes[2];
+            Xe = msgs.data[1];
+            Ye = msgs.data[2];
+            Theta = msgs.data[3];
             x_error = 0;
             y_error = 0;
             t_error = 0;
@@ -238,15 +239,15 @@ void getData(const sensor_msgs::Joy &msgs){//メッセージ受信時に呼び�
             break;
         case 20://停止と補正
             safe(0,dummy);
-            X = msgs.axes[0];
-            Y = msgs.axes[1];
-            gy->reset(msgs.axes[2]);
+            X = msgs.data[1];
+            Y = msgs.data[2];
+            gy->reset(msgs.data[3]);
             break;
     }
 }
 
 std_msgs::Float32MultiArray now;
-ros::Subscriber<sensor_msgs::Joy> sub("moter",&getData);
+ros::Subscriber<std_msgs::Float32MultiArray> sub("moter",&getData);
 ros::Publisher place("place", &now);
 
 int main(int argc,char **argv){
@@ -304,6 +305,7 @@ int main(int argc,char **argv){
             now.data[1] = nowV[0];/*
             now.data[8] = nowV[1];
             now.data[9] = nowV[2];*/
+            //now.data[2] = driveV[0];
             place.publish(&now);
             loop.reset();
         }
