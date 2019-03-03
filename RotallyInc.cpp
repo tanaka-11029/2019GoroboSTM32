@@ -43,30 +43,33 @@ void RotaryInc::calcu(){
     if(!startflag){
         time->start();
         startflag = true;
-        count = 0;
+        last[0] = pulse;
+        pre_t[0] = 0;
+        count = 1;
     }else if(flag){
-    	now = time->read();
+        now = time->read();
         time->reset();
-    	sum -= pre_t[count];
-    	pre_t[count] = now;
-    	sum += now;
+        sum -= pre_t[count];
+        pre_t[count] = now;
+        sum += now;
         speed = (double)(pulse - last[count]) / sum;
         last[count] = pulse;
         if(count < 19){
-        	count++;
+            count++;
         }else{
-        	count = 0;
+            count = 0;
         }
     }else{
-    	now = time->read();
+        now = time->read();
         time->reset();
+        pre_t[count] = now;
+        sum += now;
+        speed = (double)(pulse - last[0]) / sum;
         last[count] = pulse;
-    	pre_t[count] = now;
-    	sum += now;
         count++;
         if(count > 19){
-        	count = 0;
-        	flag = true;
+            count = 0;
+            flag = true;
         }
     }
 }
@@ -97,7 +100,7 @@ long long RotaryInc::get(){
 
 double RotaryInc::getSpeed(){
 	if(!measur)return 0;
-	if(time->read_ms() > 250){
+	if(time->read_ms() > 50){
 		zero();
 	}
     return speed / 256 / mode * 319.185813605;//2piR

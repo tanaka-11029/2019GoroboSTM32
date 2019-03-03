@@ -138,10 +138,10 @@ bool Drive(int id,float pwm){//モーターを回す
     }
     return true;
 }
-int Period;
+//int Period;
 void move(){//X,Y,Omegaから３つのモーターのPWMに変換する
-	static double kp = 0.6,ki = 20.0,kd = 0.01;//要修正
-	static double diff[3],errer[3],diffV[3],lastV[3],now_t;
+	static const double kp = 0.55,ki = 12,kd = 0.001;//要修正
+	static double diff[3],errer[3] = {},diffV[3],lastV[3],now_t;
 	static bool flag;
 	if(!drivebyms){
 		driveMS[0] = Vx*cos(Yaw)         + Vy*sin(Yaw)         + Omega;
@@ -153,25 +153,25 @@ void move(){//X,Y,Omegaから３つのモーターのPWMに変換する
 		motertimer.reset();
 	}
 	for(j = 0;j < 3;j++){
-		if(movePID){
-			if(driveMS[j] == 0){
-				driveMS[j] = 0;
-				diff[j] = 0;
-				errer[j] = 0;
-			}
-			nowV[j] = Speed[j]->getSpeed();
-			/*if(nowV[j] > lastV[j] && flag && j == 0){
+		if(movePID){/*
+			if(nowV[j] > lastV[j] && flag && j == 0){
 				Period = motertimer.read_us();
 				motertimer.reset();
 				flag = false;
 			}else if(nowV[j] < lastV[j] && !flag && j == 0){
 				flag = true;
 			}*/
+			nowV[j] = Speed[j]->getSpeed();
 			diff[j] = driveMS[j] - nowV[j];
+			if(nowV[j] == 0){
+				errer[j] = 0;
+			}
 			errer[j] += diff[j] * now_t;
 			diffV[j] = (nowV[j] - lastV[j]) / now_t;
 			lastV[j] = nowV[j];
 			driveV[j] =  driveMS[j] + (diff[j] * kp + errer[j] * ki - diffV[j] * kd);
+		}else{
+			driveV[j] = driveMS[j];
 		}
 		Drive(j,toPWM(driveV[j]) * driveV[j]);
 	}
@@ -255,7 +255,7 @@ int main(int argc,char **argv){
     nh.initNode();
     nh.advertise(place);
     nh.subscribe(sub);
-    now.data_length = 2;
+    now.data_length = 6;
     now.data = (float *)malloc(sizeof(float)*now.data_length);
     int i;
     double diff[3],Pspeed[3];
@@ -294,18 +294,18 @@ int main(int argc,char **argv){
         nh.spinOnce();
         gyro.updata();//Yaw軸取得
         Yaw = gyro.yaw;
-        if(loop.read_ms() > 5){//10msごとに通信して通信量の調節
-            now.data[0] = driveV[0];//X本来はオドメトリを送る
-            /*now.data[1] = driveV[1];//Y
-            now.data[2] = driveV[2];//T
-            now.data[3] = Yaw;
-            now.data[4] = X;//mm/s
-            now.data[5] = Y;
-            now.data[6] = T;*/
-            now.data[1] = nowV[0];/*
+        if(loop.read_ms() > 20){//10msごとに通信して通信量の調節
+            now.data[0] = Place[0]->get();//X本来はオドメトリを送る
+            now.data[1] = Place[1]->get();//Y
+            now.data[2] = Place[2]->get();//T
+            now.data[3] = Speed[0]->get();
+            now.data[4] = Speed[1]->get();//mm/s
+            now.data[5] = Speed[2]->get();/*
+            now.data[6] = T;
+            now.data[1] = nowV[1];
             now.data[8] = nowV[1];
             now.data[9] = nowV[2];*/
-            //now.data[2] = driveV[0];
+            //now.data[2] = Period;
             place.publish(&now);
             loop.reset();
         }
