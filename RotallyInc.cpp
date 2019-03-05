@@ -11,6 +11,7 @@ RotaryInc::RotaryInc(PinName pinA,PinName pinB,int mode):mode(mode){
     }else{
         measur = false;
     }
+    pulse = 0;
     
     A = new InterruptIn(pinA,PullUp);
     B = new InterruptIn(pinB,PullUp);

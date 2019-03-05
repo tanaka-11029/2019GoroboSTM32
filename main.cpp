@@ -18,12 +18,12 @@
 #define PI_6  0.523598775598
 #define PI2_3 2.09439510239
 
-#define Kp 0.0175
-#define Ki 0//0.0000135
+#define Kp 2.8
+#define Ki 0.002//0.0000135
 #define Kd 0//4
 
-#define AMAX 500.0
-#define VMAX 3500.0
+#define AMAX 400.0
+#define VMAX 1800.0
 
 const PinName PIN[][3] = {
     {PB_14,PB_13,PB_15},//入れ替えた
@@ -71,9 +71,9 @@ ros::NodeHandle nh;
 int j,dummy;
 bool OK = false;//いっぱい宣言したけどイランやつもあると思う
 bool automove = false;
-bool PID = false;
 bool drivebyms = false;
 bool movePID = true;
+double Kpx = Kp,Kpy = Kp;
 double prev_t,diff_t,now_t;
 double driveMS[3] = {0,0,0};
 double t[3],x[3];
@@ -89,7 +89,6 @@ double x_diff,y_diff,t_diff;
 double driveV[3],nowV[3];
 
 bool safe(int rx_data,int &tx_data){//言わずもがな止める
-	if(drivebyms)drivebyms = false;
     Vx = 0;
     Vy = 0;
     Omega = 0;
@@ -185,7 +184,7 @@ void getData(const std_msgs::Float32MultiArray &msgs){//メッセージ受信時
             movePID = true;
         	if(drivebyms)drivebyms = false;
             if(automove)automove = false;
-            if(!movePID)movePID = false;
+            if(!movePID)movePID = true;
             Vx = msgs.data[1];
             Vy = msgs.data[2];
             Omega = msgs.data[3];
@@ -213,7 +212,7 @@ void getData(const std_msgs::Float32MultiArray &msgs){//メッセージ受信時
             Ymax = msgs.data[4];//Y軸方向の最大速度
             Xe = msgs.data[5];//目標X軸
             Ye = msgs.data[6];//目標Y軸
-            Theta = msgs.data[6];//目標向き
+            Theta = msgs.data[7];//目標向き
             /*Vmax[0] = msgs.data[7];//モーター1の最大速度
             Vmax[1] = msgs.data[8];//モーター2の最大速度
             Vmax[2] = msgs.data[9];//モーター3の最大速度*/
@@ -222,8 +221,9 @@ void getData(const std_msgs::Float32MultiArray &msgs){//メッセージ受信時
             t_error = 0;
             prev_t = 0;
             diff_t = 0;
+            Kpx = Kp;
+            Kpy = Kp;
             automove = true;
-            PID = false;
             autotimer.reset();
             autotimer.start();
             break;
@@ -231,13 +231,16 @@ void getData(const std_msgs::Float32MultiArray &msgs){//メッセージ受信時
             Xe = msgs.data[1];
             Ye = msgs.data[2];
             Theta = msgs.data[3];
+            t[0] = 0;
+            t[1] = 0;
             x_error = 0;
             y_error = 0;
             t_error = 0;
             prev_t = 0;
             diff_t = 0;
+            Kpx = Kp;
+            Kpy = Kp;
             automove = true;
-            PID = true;
             autotimer.reset();
             autotimer.start();
             break;
@@ -259,8 +262,9 @@ int main(int argc,char **argv){
     nh.initNode();
     nh.advertise(place);
     nh.subscribe(sub);
-    now.data_length = 6;
+    now.data_length = 7;
     now.data = (float *)malloc(sizeof(float)*now.data_length);
+    bool xok,yok;
     int i;
     double diff[3],Pspeed[3];
     for(i = 0;i<M_NUM;i++){
@@ -271,7 +275,7 @@ int main(int argc,char **argv){
         Moter[i][1]->period_us(2048);
     }
     for(i = 0;i < 3;i++){
-        Place[i] = new RotaryInc(RotaryPin[i][0],RotaryPin[i][1],3);
+        Place[i] = new RotaryInc(RotaryPin[i][0],RotaryPin[i][1],1);
         Speed[i] = new RotaryInc(RotaryPin[i+3][0],RotaryPin[i+3][1],3);
     }
     event.rise(&trigger);
@@ -299,13 +303,13 @@ int main(int argc,char **argv){
         gyro.updata();//Yaw軸取得
         Yaw = gyro.yaw;
         if(loop.read_ms() > 20){//10msごとに通信して通信量の調節
-            now.data[0] = nowV[0];//X本来はオドメトリを送る
-            now.data[1] = nowV[1];//Y
-            now.data[2] = nowV[2];//T
-            now.data[3] = driveV[0];
-            now.data[4] = driveV[1];//mm/s
-            now.data[5] = driveV[2];/*
-            now.data[6] = T;
+            now.data[0] = X;//X本来はオドメトリを送る
+            now.data[1] = Y;//Y
+            now.data[2] = T;//T
+            now.data[3] = Yaw;
+            now.data[4] = nowVx;//mm/s
+            now.data[5] = nowVy;
+            now.data[6] = nowVt;/*
             now.data[1] = nowV[1];
             now.data[8] = nowV[1];
             now.data[9] = nowV[2];*/
@@ -329,44 +333,57 @@ int main(int argc,char **argv){
         	if(drivebyms)drivebyms = false;
         	if(!movePID)movePID = true;
             now_t = (double)autotimer.read_us() / 1000000;
-            if(PID){//なんとなくのPID制御
-                diff_t = now_t - prev_t;
-                prev_t = now_t;
-                x_diff = Xe - X;
-                y_diff = Ye - Y;
-                t_diff = Theta - Yaw;
-                x_error += x_diff * diff_t;
-                y_error += y_diff * diff_t;
-                t_error += t_diff * diff_t;
-                Vx = Kp*x_diff + Ki*x_error - Kd*nowVx;
-                Vy = Kp*y_diff + Ki*y_error - Kd*nowVy;
+            diff_t = now_t - prev_t;
+            prev_t = now_t;
+            x_diff = Xe - X;
+            y_diff = Ye - Y;
+            t_diff = Theta - Yaw;
+            if(now_t < t[0]){//x方向
+                Vx = Xmax/2.0*(1-cos(2.0*AMAX*now_t/Xmax));
+                if(xok)xok = false;
+            }else if(fabs(x_diff) < 5){
+            	Vx = 0;
+            }else{
+            	//if(fabs(x_diff) < 100)Kpx = 0.2;
+            	//else x_diff -= 71.4;
+                Vx = Kpx*x_diff + Ki*x_error - Kd*nowVx;
+            	//Vx = atan(x_diff) / PI * 2 * Xmax + Ki*x_error - Kd*nowVx;
                 if(fabs(Vx) > fabs(Xmax)){
                     Vx = Xmax;
+                }else{
+                    x_error += x_diff * diff_t;
                 }
+            	if(!xok)xok = true;
+            }
+
+            if(now_t < t[1]){//y方向
+                Vy = Ymax/2.0*(1-cos(2.0*AMAX*now_t/Ymax));
+                if(yok)yok = false;
+            }else if(fabs(y_diff) < 5){
+            	Vy = 0;
+            }else{
+            	//if(fabs(y_diff) < 100)Kpy = 0.2;
+                Vy = Kpy*y_diff + Ki*y_error - Kd*nowVy;
+            	//Vy = atan(y_diff) / PI * 2 * Ymax + Ki*y_error - Kd*nowVy;
                 if(fabs(Vy) > fabs(Ymax)){
                     Vy = Ymax;
-                }
-                Omega = Kp*t_diff + Ki*t_error - Kd*nowVt;
-                if(Omega > 50)Omega = 50;
-                else if(Omega < -50)Omega = -50;
-                if(x_diff < 30 && y_diff < 30 && t_diff < PI/90){
-                    automove = false;
-                    Vx = 0;
-                    Vy = 0;
-                    Omega = 0;
-                }
-            }else{
-                if(now_t < t[0]){//加速だけS字で行う
-                    /*for(i = 0;i<3;i++){
-                        v[i] = toPWM * (Vmax[i]/2*(1-cos(2*Amax*now_t/Vmax[i])));
-                        Drive(i,v[i]);
-                    }*/
-                    Vx = Xmax/2.0*(1-cos(2.0*AMAX*now_t/Xmax));
-                    Vy = Ymax/2.0*(1-cos(2.0*AMAX*now_t/Ymax));
-                    Omega = 0;
                 }else{
-                    PID = true;
+                    y_error += y_diff * diff_t;
                 }
+            	if(!yok)yok = true;
+            }
+
+            if(xok && yok){
+                Omega = 300*t_diff + 0.01*t_error - 3*nowVt;
+                if(Omega > 300)Omega = 300;
+                else if(Omega < -300)Omega = -300;
+                else t_error += t_diff * diff_t;
+                if(fabs(t_diff) < PI/90){
+                	Omega = 0;
+                }
+            }
+            if(!Vx && !Vy && !Omega){
+                automove = false;
             }
         }
     }
