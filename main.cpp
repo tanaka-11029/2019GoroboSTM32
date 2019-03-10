@@ -18,9 +18,13 @@
 #define PI_6  0.523598775598
 #define PI2_3 2.09439510239
 
-#define Kp 2.8
-#define Ki 0.002//0.0000135
-#define Kd 0//4
+#define Kp 2.2//移動
+#define Ki 0.2
+#define Kd 0.001
+
+#define kp 0.048//モーター
+#define ki 1.6
+#define kd 0.00008
 
 #define AMAX 400.0
 #define VMAX 1800.0
@@ -56,6 +60,7 @@ const PinName SolenoidPin[] = {
 */
 InterruptIn event(PC_13);
 DigitalOut led(PA_5);
+DigitalIn limit1(PH_0,PullUp),limit2(PH_1,PullUp);
 
 ScrpSlave arduino(PC_12,PD_2,PA_13,0x0807ffff);
 
@@ -71,19 +76,22 @@ ros::NodeHandle nh;
 int j,dummy;
 bool OK = false;//いっぱい宣言したけどイランやつもあると思う
 bool automove = false;
+bool autoX = false;
+bool autoY = false;
+bool autoT = false;
 bool drivebyms = false;
+bool limit = false;
 bool movePID = true;
-double Kpx = Kp,Kpy = Kp;
+bool kikou = false;
+double stampX,stampY;
 double prev_t,diff_t,now_t;
 double driveMS[3] = {0,0,0};
-double t[3],x[3];
+double t[3];
 double Xmax,Ymax;
-double Vmax[3],v[3];
-double delta[3];
 double X=0,Y=0,T=0;
 double Theta,Yaw,Xe,Ye;
 double Vx,Vy,Omega;
-double Vd[3],nowVx,nowVy,nowVt;
+double nowVx,nowVy,nowVt;
 double x_error,y_error,t_error;
 double x_diff,y_diff,t_diff;
 double driveV[3],nowV[3];
@@ -92,6 +100,7 @@ bool safe(int rx_data,int &tx_data){//言わずもがな止める
     Vx = 0;
     Vy = 0;
     Omega = 0;
+    if(drivebyms)drivebyms = false;
     for(int i = 0;i<3;i++){
     	driveMS[i] = 0;
     	driveV[i] = 0;
@@ -139,11 +148,9 @@ bool Drive(int id,float pwm){//モーターを回す
     }
     return true;
 }
-//int Period;
+
 void move(){//X,Y,Omegaから３つのモーターのPWMに変換する
-	static const double kp = 0.6,ki = 20,kd = 0.001;//要修正
 	static double diff[3],errer[3] = {0,0,0},diffV[3],lastV[3],now_t;
-	//static bool flag;
 	if(!drivebyms){
 		driveMS[0] = Vx*cos(Yaw)         + Vy*sin(Yaw)         + Omega;
 		driveMS[1] = Vx*cos(Yaw + PI2_3) + Vy*sin(Yaw + PI2_3) + Omega;
@@ -163,7 +170,7 @@ void move(){//X,Y,Omegaから３つのモーターのPWMに変換する
 			errer[j] += diff[j] * now_t;
 			diffV[j] = (nowV[j] - lastV[j]) / now_t;
 			lastV[j] = nowV[j];
-			driveV[j] = 0.08 * (driveMS[j] + (diff[j] * kp + errer[j] * ki - diffV[j] * kd));
+			driveV[j] = 0.08 * driveMS[j] + diff[j] * kp + errer[j] * ki - diffV[j] * kd;
 		}else{
 			driveV[j] = driveMS[j];
 		}
@@ -205,6 +212,53 @@ void getData(const std_msgs::Float32MultiArray &msgs){//メッセージ受信時
             driveMS[1] = msgs.data[2];
             driveMS[2] = msgs.data[3];
             break;
+        case 15:
+        	t[0] = msgs.data[1];
+        	Xmax = msgs.data[2];
+        	Xe = msgs.data[3];
+            x_error = 0;
+        	autoX = true;
+        	if(automove){
+        		stampX = autotimer.read();
+        	}else{
+        		stampX = 0;
+                prev_t = 0;
+                diff_t = 0;
+        		automove = true;
+                autotimer.reset();
+                autotimer.start();
+        	}
+        	break;
+        case 16:
+        	t[1] = msgs.data[1];
+        	Ymax = msgs.data[2];
+        	Ye = msgs.data[3];
+        	//limit = msgs.data[4];
+            y_error = 0;
+        	autoY = true;
+        	if(automove){
+        		stampY = autotimer.read();
+        	}else{
+        		stampY = 0;
+                prev_t = 0;
+                diff_t = 0;
+        		automove = true;
+                autotimer.reset();
+                autotimer.start();
+        	}
+        	break;
+        case 17:
+        	Theta = msgs.data[1];
+            t_error = 0;
+            autoT = true;
+        	if(!automove){
+        		automove = true;
+                prev_t = 0;
+                diff_t = 0;
+                autotimer.reset();
+                autotimer.start();
+        	}
+        	break;
         case 18://S字加速->PID減速及び微調整
             t[0] = msgs.data[1];//加速時間
             t[1] = msgs.data[2];//加速時間＋並行走行時間
@@ -213,17 +267,17 @@ void getData(const std_msgs::Float32MultiArray &msgs){//メッセージ受信時
             Xe = msgs.data[5];//目標X軸
             Ye = msgs.data[6];//目標Y軸
             Theta = msgs.data[7];//目標向き
-            /*Vmax[0] = msgs.data[7];//モーター1の最大速度
-            Vmax[1] = msgs.data[8];//モーター2の最大速度
-            Vmax[2] = msgs.data[9];//モーター3の最大速度*/
             x_error = 0;
             y_error = 0;
             t_error = 0;
             prev_t = 0;
             diff_t = 0;
-            Kpx = Kp;
-            Kpy = Kp;
+            stampX = 0;
+            stampY = 0;
             automove = true;
+            autoX = true;
+            autoY = true;
+            autoT = true;
             autotimer.reset();
             autotimer.start();
             break;
@@ -238,9 +292,12 @@ void getData(const std_msgs::Float32MultiArray &msgs){//メッセージ受信時
             t_error = 0;
             prev_t = 0;
             diff_t = 0;
-            Kpx = Kp;
-            Kpy = Kp;
             automove = true;
+            autoX = true;
+            autoY = true;
+            autoT = true;
+            stampX = 0;
+            stampY = 0;
             autotimer.reset();
             autotimer.start();
             break;
@@ -262,7 +319,7 @@ int main(int argc,char **argv){
     nh.initNode();
     nh.advertise(place);
     nh.subscribe(sub);
-    now.data_length = 7;
+    now.data_length = 8;
     now.data = (float *)malloc(sizeof(float)*now.data_length);
     bool xok,yok;
     int i;
@@ -275,7 +332,7 @@ int main(int argc,char **argv){
         Moter[i][1]->period_us(2048);
     }
     for(i = 0;i < 3;i++){
-        Place[i] = new RotaryInc(RotaryPin[i][0],RotaryPin[i][1],1);
+        Place[i] = new RotaryInc(RotaryPin[i][0],RotaryPin[i][1],3);
         Speed[i] = new RotaryInc(RotaryPin[i+3][0],RotaryPin[i+3][1],3);
     }
     event.rise(&trigger);
@@ -302,25 +359,22 @@ int main(int argc,char **argv){
         nh.spinOnce();
         gyro.updata();//Yaw軸取得
         Yaw = gyro.yaw;
-        if(loop.read_ms() > 20){//10msごとに通信して通信量の調節
+        if(loop.read_ms() > 25){//10msごとに通信して通信量の調節
             now.data[0] = X;//X本来はオドメトリを送る
             now.data[1] = Y;//Y
             now.data[2] = T;//T
             now.data[3] = Yaw;
             now.data[4] = nowVx;//mm/s
             now.data[5] = nowVy;
-            now.data[6] = nowVt;/*
-            now.data[1] = nowV[1];
-            now.data[8] = nowV[1];
-            now.data[9] = nowV[2];*/
-            //now.data[2] = Period;
+            now.data[6] = nowVt;
+            now.data[7] = automove + ((Vx || Vy || Omega) << 1) + (kikou << 2);
             place.publish(&now);
             loop.reset();
         }
         Yaw *= 0.0174532925199432;//pi/180
         move();//モーターの状態を更新
         for(i = 0;i<3;++i){
-            diff[i] = Place[i]->diff() / 256.0 * R;
+            diff[i] = Place[i]->diff() / 256.0 / 2 * R;
             Pspeed[i] = Place[i]->getSpeed();
         }//オドメトリ計算
         X += -2.0/3.0*diff[0]*cos(Yaw) + 2.0/3.0*diff[1]*cos(Yaw-PI_3) + 2.0/3.0*diff[2]*cos(Yaw+PI_3);
@@ -332,58 +386,71 @@ int main(int argc,char **argv){
         if(automove){
         	if(drivebyms)drivebyms = false;
         	if(!movePID)movePID = true;
-            now_t = (double)autotimer.read_us() / 1000000;
+            now_t = (double)autotimer.read();
             diff_t = now_t - prev_t;
             prev_t = now_t;
             x_diff = Xe - X;
             y_diff = Ye - Y;
             t_diff = Theta - Yaw;
-            if(now_t < t[0]){//x方向
-                Vx = Xmax/2.0*(1-cos(2.0*AMAX*now_t/Xmax));
-                if(xok)xok = false;
-            }else if(fabs(x_diff) < 5){
-            	Vx = 0;
-            }else{
-            	//if(fabs(x_diff) < 100)Kpx = 0.2;
-            	//else x_diff -= 71.4;
-                Vx = Kpx*x_diff + Ki*x_error - Kd*nowVx;
-            	//Vx = atan(x_diff) / PI * 2 * Xmax + Ki*x_error - Kd*nowVx;
-                if(fabs(Vx) > fabs(Xmax)){
-                    Vx = Xmax;
-                }else{
-                    x_error += x_diff * diff_t;
-                }
-            	if(!xok)xok = true;
-            }
+            if(autoX){
+            	if((now_t - stampX) < t[0]){//x方向
+            		Vx = Xmax/2.0*(1-cos(2.0*AMAX*(now_t - stampX)/Xmax));
+            		if(xok)xok = false;
+            	}else if(fabs(x_diff) < 5 && fabs(nowVx) < 30){
+            		Vx = 0;
+            		autoX = false;
+            	}else{
+            		Vx = Kp*x_diff + Ki*x_error - Kd*nowVx;
+            		if(fabs(Vx) > fabs(Xmax)){
+            			Vx = Xmax;
+            		}else{
+            			x_error += x_diff * diff_t;
+            		}
+            		if(!xok)xok = true;
+            	}
+            }else if(!xok)xok = true;
 
-            if(now_t < t[1]){//y方向
-                Vy = Ymax/2.0*(1-cos(2.0*AMAX*now_t/Ymax));
-                if(yok)yok = false;
-            }else if(fabs(y_diff) < 5){
-            	Vy = 0;
-            }else{
-            	//if(fabs(y_diff) < 100)Kpy = 0.2;
-                Vy = Kpy*y_diff + Ki*y_error - Kd*nowVy;
-            	//Vy = atan(y_diff) / PI * 2 * Ymax + Ki*y_error - Kd*nowVy;
-                if(fabs(Vy) > fabs(Ymax)){
-                    Vy = Ymax;
-                }else{
-                    y_error += y_diff * diff_t;
-                }
-            	if(!yok)yok = true;
-            }
+            if(autoY){
+            	if((now_t - stampY)< t[1]){//y方向
+                	Vy = Ymax/2.0*(1-cos(2.0*AMAX*(now_t - stampY)/Ymax));
+                	if(yok)yok = false;
+            	}else if((fabs(nowVy) < 30 && fabs(y_diff) < 5) || (limit && limit1.read() && limit2.read())){
+            		Vy = 0;
+            		autoY = false;
+            	}else{
+                	Vy = Kp*y_diff + Ki*y_error - Kd*nowVy;
+                	if(fabs(Vy) > fabs(Ymax)){
+                		Vy = Ymax;
+                	}else{
+                    	y_error += y_diff * diff_t;
+                	}
+            		if(!yok)yok = true;
+            	}
+            }else if(!yok)yok = true;
 
-            if(xok && yok){
-                Omega = 300*t_diff + 0.01*t_error - 3*nowVt;
-                if(Omega > 300)Omega = 300;
-                else if(Omega < -300)Omega = -300;
+            if(autoT || limit){
+                Omega = 200*t_diff + 0.2*t_error - 0.03*nowVt;
+                if(limit){
+                	Omega = Omega + limit1.read() * 50 - limit2.read() * 50;
+                }
+                if(Omega > 200)Omega = 200;
+                else if(Omega < -200)Omega = -200;
                 else t_error += t_diff * diff_t;
-                if(fabs(t_diff) < PI/90){
+                if(fabs(t_diff) < PI/90 && !autoX && !autoY){
                 	Omega = 0;
+                	autoT = false;
                 }
             }
-            if(!Vx && !Vy && !Omega){
-                automove = false;
+
+            if(!autoT && !autoX && !autoY){
+            	if(limit){
+            		if(limit1.read() && limit2.read()){
+            			limit = false;
+            			automove = false;
+            		}
+            	}else{
+            		automove = false;
+            	}
             }
         }
     }
