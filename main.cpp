@@ -6,7 +6,7 @@
 #include "GY521.h"
 
 #define MAXPWM 220
-#define M_NUM 4
+#define M_NUM 5
 
 #define R 319.185813605//タイヤの直径 * PI
 #define R3 1110//本体の中心からタイヤへの長さの3倍
@@ -27,7 +27,7 @@
 #define kd 0.00008
 
 #define AMAX 400.0
-#define VMAX 1800.0
+#define VMAX 500.0
 
 const PinName PIN[][3] = {
     {PB_14,PB_13,PB_15},//入れ替えた
@@ -53,27 +53,33 @@ const PinName RotaryPin[6][2] = {
     {PC_3 ,PC_2 },
     {PC_5 ,PA_12}
 };
-/*
-const PinName SolenoidPin[] = {
-    PC_12,PA_13,PC_14,PC_15,PH_0,PH_1,PC_10,PC_11,PD_2
+
+const PinName OutPin[6] = {
+    PA_1,PA_0,PB_0,PB_6,PB_7,PC_7
 };
-*/
+
+const PinName InPin[7] = {
+	PH_0,PH_1,PC_14,PC_15,PC_4,PC_0,PC_1
+};
+
 InterruptIn event(PC_13);
 DigitalOut led(PA_5);
-DigitalIn limit1(PH_0,PullUp),limit2(PH_1,PullUp);
 
-ScrpSlave arduino(PC_12,PD_2,PA_13,0x0807ffff);
+//ScrpSlave arduino(PC_12,PD_2,PA_13,0x0807ffff);
 
 PwmOut* Moter[7][2];
 DigitalOut* Led[7];
+DigitalOut* Solenoid[6];
+DigitalIn* Limit[7];
 RotaryInc* Speed[3];
 RotaryInc* Place[3];
 GY521 *gy;
-Timer autotimer,motertimer;
+Timer autotimer,motertimer,kikoutimer;
 
 ros::NodeHandle nh;
 
-int j,dummy;
+uint8_t kikou = 0;
+int j;
 bool OK = false;//いっぱい宣言したけどイランやつもあると思う
 bool automove = false;
 bool autoX = false;
@@ -82,7 +88,6 @@ bool autoT = false;
 bool drivebyms = false;
 bool limit = false;
 bool movePID = true;
-bool kikou = false;
 double stampX,stampY;
 double prev_t,diff_t,now_t;
 double driveMS[3] = {0,0,0};
@@ -96,10 +101,15 @@ double x_error,y_error,t_error;
 double x_diff,y_diff,t_diff;
 double driveV[3],nowV[3];
 
-bool safe(int rx_data,int &tx_data){//言わずもがな止める
+void safe(){//言わずもがな止める
     Vx = 0;
     Vy = 0;
     Omega = 0;
+    automove = false;
+    autoX = false;
+    autoY = false;
+    autoT = false;
+    kikou = 0;
     if(drivebyms)drivebyms = false;
     for(int i = 0;i<3;i++){
     	driveMS[i] = 0;
@@ -110,19 +120,14 @@ bool safe(int rx_data,int &tx_data){//言わずもがな止める
         Moter[i][1]->write(0);   
         Led[i]->write(0);
     }
-    return true;
 }
 
 void trigger(){//ボタンを押されたとき
     if(!OK){
         OK = true;
     }else{
-        automove = false;
         led.write(0);
-        safe(0,dummy);
-        Vx = 0;
-        Vy = 0;
-        Omega = 0;
+        safe();
         gy->reset(0);
         X = 0;
         Y = 0;
@@ -164,7 +169,7 @@ void move(){//X,Y,Omegaから３つのモーターのPWMに変換する
 		nowV[j] = Speed[j]->getSpeed();
 		if(movePID){
 			diff[j] = driveMS[j] - nowV[j];
-			if(nowV[j] == 0 && driveMS[j] == 0){
+			if(nowV[j] == 0 && driveMS[j] == 0 && errer[j] != 0){
 				errer[j] = 0;
 			}
 			errer[j] += diff[j] * now_t;
@@ -181,7 +186,22 @@ void move(){//X,Y,Omegaから３つのモーターのPWMに変換する
 void getData(const std_msgs::Float32MultiArray &msgs){//メッセージ受信時に呼び出される
     switch((int)msgs.data[0]){//メッセージの最初のデータをヘッダーとして使う
     	case -30:
-    		safe(0,dummy);
+    		safe();
+    		break;
+    	case -10://ペットボトルを取る
+    		kikou |= 1;
+    		break;
+    	case -11://ペットボトルを置く
+    		kikou |= 2;
+    		break;
+    	case -12://食事を取る
+    		kikou |= 4;
+    		break;
+    	case -13://食事を投げる
+    		kikou |= 8;
+    		break;
+    	case -14:
+    		kikou |= 16;
     		break;
     	case -1:
             trigger();
@@ -219,7 +239,7 @@ void getData(const std_msgs::Float32MultiArray &msgs){//メッセージ受信時
             x_error = 0;
         	autoX = true;
         	if(automove){
-        		stampX = autotimer.read();
+        		stampX = now_t;
         	}else{
         		stampX = 0;
                 prev_t = 0;
@@ -237,7 +257,7 @@ void getData(const std_msgs::Float32MultiArray &msgs){//メッセージ受信時
             y_error = 0;
         	autoY = true;
         	if(automove){
-        		stampY = autotimer.read();
+        		stampY = now_t;
         	}else{
         		stampY = 0;
                 prev_t = 0;
@@ -302,7 +322,7 @@ void getData(const std_msgs::Float32MultiArray &msgs){//メッセージ受信時
             autotimer.start();
             break;
         case 20://停止と補正
-            safe(0,dummy);
+            safe();
             X = msgs.data[1];
             Y = msgs.data[2];
             gy->reset(msgs.data[3]);
@@ -321,7 +341,7 @@ int main(int argc,char **argv){
     nh.subscribe(sub);
     now.data_length = 8;
     now.data = (float *)malloc(sizeof(float)*now.data_length);
-    bool xok,yok;
+    bool xok,yok,flag = false;
     int i;
     double diff[3],Pspeed[3];
     for(i = 0;i<M_NUM;i++){
@@ -334,6 +354,12 @@ int main(int argc,char **argv){
     for(i = 0;i < 3;i++){
         Place[i] = new RotaryInc(RotaryPin[i][0],RotaryPin[i][1],3);
         Speed[i] = new RotaryInc(RotaryPin[i+3][0],RotaryPin[i+3][1],3);
+    }
+    for(i = 0;i < 7;i++){
+    	Limit[i] = new DigitalIn(InPin[i],PullNone);
+    }
+    for(i = 0;i < 6;i++){
+    	Solenoid[i] = new DigitalOut(OutPin[i],0);
     }
     event.rise(&trigger);
     Timer loop;
@@ -367,7 +393,7 @@ int main(int argc,char **argv){
             now.data[4] = nowVx;//mm/s
             now.data[5] = nowVy;
             now.data[6] = nowVt;
-            now.data[7] = automove + ((Vx || Vy || Omega) << 1) + (kikou << 2);
+            now.data[7] = automove + ((Vx || Vy || Omega) << 1) + (autoX << 2) + (autoY << 3) + (autoT << 4) + (kikou << 5);
             place.publish(&now);
             loop.reset();
         }
@@ -414,7 +440,7 @@ int main(int argc,char **argv){
             	if((now_t - stampY)< t[1]){//y方向
                 	Vy = Ymax/2.0*(1-cos(2.0*AMAX*(now_t - stampY)/Ymax));
                 	if(yok)yok = false;
-            	}else if((fabs(nowVy) < 30 && fabs(y_diff) < 5) || (limit && limit1.read() && limit2.read())){
+            	}else if((fabs(nowVy) < 30 && fabs(y_diff) < 5) || (limit && Limit[0]->read() && Limit[1]->read())){
             		Vy = 0;
             		autoY = false;
             	}else{
@@ -431,12 +457,12 @@ int main(int argc,char **argv){
             if(autoT || limit){
                 Omega = 200*t_diff + 0.2*t_error - 0.03*nowVt;
                 if(limit){
-                	Omega = Omega + limit1.read() * 50 - limit2.read() * 50;
+                	Omega = Omega + Limit[0]->read() * 50 - Limit[1]->read() * 50;
                 }
                 if(Omega > 200)Omega = 200;
                 else if(Omega < -200)Omega = -200;
                 else t_error += t_diff * diff_t;
-                if(fabs(t_diff) < PI/90 && !autoX && !autoY){
+                if(fabs(t_diff) < PI/180 && !autoX && !autoY){
                 	Omega = 0;
                 	autoT = false;
                 }
@@ -444,7 +470,7 @@ int main(int argc,char **argv){
 
             if(!autoT && !autoX && !autoY){
             	if(limit){
-            		if(limit1.read() && limit2.read()){
+            		if(Limit[0]->read() && Limit[1]->read()){
             			limit = false;
             			automove = false;
             		}
@@ -452,6 +478,88 @@ int main(int argc,char **argv){
             		automove = false;
             	}
             }
+        }else if(kikou){
+        	if(kikou & 1){//ペットボトルを取る
+        		if(!Limit[2]->read() && !Limit[3]->read() && !flag){
+        			Drive(3,50);
+        		}else if(!flag){
+        			Drive(3,0);
+        			Solenoid[0]->write(1);
+        			kikoutimer.reset();
+        			kikoutimer.start();
+        			flag = true;
+        		}else if(flag && !Limit[4]->read()){
+        			if(kikoutimer.read() > 0.05){
+            			Drive(3,-50);
+        			}
+        		}else if(flag){
+        			Drive(3,0);
+        			kikoutimer.reset();
+        			while(kikoutimer.read() < 0.05);
+        			Solenoid[0]->write(0);
+        			flag = false;
+        			kikou &= 0b11111110;
+        			kikoutimer.stop();
+        			kikoutimer.reset();
+        		}
+        	}
+        	if(kikou & 2){//ペットボトルを置く
+        		if(!flag){
+        			Solenoid[1]->write(1);
+        			kikoutimer.reset();
+        			kikoutimer.start();
+        			flag = true;
+        		}else if(flag && kikoutimer.read() > 0.1){
+        			Solenoid[1]->write(0);
+        			flag = false;
+        			kikoutimer.stop();
+        			kikoutimer.reset();
+            		kikou &= 0b11111101;
+        		}
+        	}
+        	if(kikou & 4){//食事を取る
+        		if(!flag && !Limit[5]->read()){
+        			Drive(4,50);
+        			Solenoid[2]->write(0);
+        		}else if(!flag){
+        			Drive(4,0);
+        			Solenoid[2]->write(1);
+        			kikoutimer.reset();
+        			kikoutimer.start();
+        			flag = true;
+        		}else if(flag && !Limit[6]->read()){
+        			if(kikoutimer.read() > 0.05){
+        				Drive(4,-50);
+        			}
+        		}else if(flag){
+        			Drive(4,0);
+        			kikoutimer.reset();
+        			while(kikoutimer.read() < 0.5);
+        			Solenoid[2]->write(0);
+        			flag = false;
+            		kikou &= 0b11111011;
+        			kikoutimer.stop();
+        			kikoutimer.reset();
+        		}
+        	}
+        	if(kikou & 8){//食事を投げる
+        		if(!flag){
+        			Solenoid[3]->write(1);
+        			flag = true;
+        			kikoutimer.reset();
+        			kikoutimer.start();
+        		}else if(flag && kikoutimer.read() > 0.5){
+        			Solenoid[3]->write(0);
+        			flag = false;
+        			kikoutimer.stop();
+        			kikoutimer.reset();
+        			kikou &= 0b11110111;
+        		}
+        	}
+        	if(kikou & 16){//
+
+        		kikou &= 0b11101111;
+        	}
         }
     }
 }
