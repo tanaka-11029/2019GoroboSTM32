@@ -78,7 +78,7 @@ Timer autotimer,motertimer,kikoutimer;
 
 ros::NodeHandle nh;
 
-uint8_t kikou = 0;
+uint16_t kikou = 0;
 int j;
 bool OK = false;//いっぱい宣言したけどイランやつもあると思う
 bool automove = false;
@@ -188,20 +188,41 @@ void getData(const std_msgs::Float32MultiArray &msgs){//メッセージ受信時
     	case -30:
     		safe();
     		break;
+    	case -31:
+    		Drive(3,50);
+    		break;
+    	case -32:
+    		Drive(3,-50);
+    		break;
+    	case -33:
+    		Drive(3,0);
+    		break;
     	case -10://ペットボトルを取る
     		kikou |= 1;
     		break;
     	case -11://ペットボトルを置く
     		kikou |= 2;
     		break;
-    	case -12://食事を取る
+    	case -12://食事を取る、下げる
     		kikou |= 4;
     		break;
-    	case -13://食事を投げる
+    	case -13://食事を取る、上げる
     		kikou |= 8;
     		break;
-    	case -14:
+    	case -14://食事を投げる
     		kikou |= 16;
+    		break;
+    	case -15://ペットボトル機構を前に出す
+    		kikou |= 32;
+    		break;
+    	case -16://ペットボトル機構を戻す
+    		kikou |= 64;
+    		break;
+    	case -17://ペットボトルをつかむ
+    		kikou |= 128;
+    		break;
+    	case -18://ペットボトルをはなす
+    		kikou |= 256;
     		break;
     	case -1:
             trigger();
@@ -481,6 +502,7 @@ int main(int argc,char **argv){
         }else if(kikou){
         	if(kikou & 1){//ペットボトルを取る
         		if(!Limit[2]->read() && !Limit[3]->read() && !flag){
+        			Solenoid[0]->write(0);
         			Drive(3,50);
         		}else if(!flag){
         			Drive(3,0);
@@ -489,16 +511,16 @@ int main(int argc,char **argv){
         			kikoutimer.start();
         			flag = true;
         		}else if(flag && !Limit[4]->read()){
-        			if(kikoutimer.read() > 0.05){
+        			if(kikoutimer.read() > 0.2){
             			Drive(3,-50);
         			}
         		}else if(flag){
         			Drive(3,0);
         			kikoutimer.reset();
-        			while(kikoutimer.read() < 0.05);
+        			while(kikoutimer.read() < 0.2);
         			Solenoid[0]->write(0);
         			flag = false;
-        			kikou &= 0b11111110;
+        			kikou &= 0xfffe;
         			kikoutimer.stop();
         			kikoutimer.reset();
         		}
@@ -509,56 +531,102 @@ int main(int argc,char **argv){
         			kikoutimer.reset();
         			kikoutimer.start();
         			flag = true;
-        		}else if(flag && kikoutimer.read() > 0.1){
+        		}else if(flag && kikoutimer.read() > 4.0){
         			Solenoid[1]->write(0);
         			flag = false;
         			kikoutimer.stop();
         			kikoutimer.reset();
-            		kikou &= 0b11111101;
+            		kikou &= 0xfffd;
         		}
         	}
-        	if(kikou & 4){//食事を取る
-        		if(!flag && !Limit[5]->read()){
-        			Drive(4,50);
+        	if(kikou & 4){//食事を取る,下ろす
+        		if(!Limit[5]->read()){
+        			Drive(4,100);
         			Solenoid[2]->write(0);
-        		}else if(!flag){
+        		}else{
         			Drive(4,0);
+        		    kikou &= 0xfffb;
+        		}
+        	}
+        	if(kikou & 8){//食事を取る、上げる
+        		if(!flag){
         			Solenoid[2]->write(1);
+        			flag = true;
         			kikoutimer.reset();
         			kikoutimer.start();
-        			flag = true;
         		}else if(flag && !Limit[6]->read()){
-        			if(kikoutimer.read() > 0.05){
-        				Drive(4,-50);
+        			if(kikoutimer.read() > 0.5){
+        				Drive(4,-70);
         			}
-        		}else if(flag){
-        			Drive(4,0);
-        			kikoutimer.reset();
-        			while(kikoutimer.read() < 0.5);
-        			Solenoid[2]->write(0);
-        			flag = false;
-            		kikou &= 0b11111011;
-        			kikoutimer.stop();
-        			kikoutimer.reset();
+          		}else if(flag){
+          			Drive(4,0);
+          			kikoutimer.reset();
+          			while(kikoutimer.read() < 0.5);
+        		    Solenoid[2]->write(0);
+        		    flag = false;
+        		    kikoutimer.stop();
+        		    kikoutimer.reset();
+            		kikou &= 0xfff7;
         		}
         	}
-        	if(kikou & 8){//食事を投げる
+        	if(kikou & 16){//食事を投げる
         		if(!flag){
         			Solenoid[3]->write(1);
         			flag = true;
         			kikoutimer.reset();
         			kikoutimer.start();
-        		}else if(flag && kikoutimer.read() > 0.5){
+        		}else if(flag && kikoutimer.read() > 1.0){
         			Solenoid[3]->write(0);
         			flag = false;
         			kikoutimer.stop();
         			kikoutimer.reset();
-        			kikou &= 0b11110111;
+        			kikou &= 0xffef;
         		}
         	}
-        	if(kikou & 16){//
-
-        		kikou &= 0b11101111;
+        	if(kikou & 32){//ペットボトル機構を前に出す
+        		if(!Limit[2]->read() && !Limit[3]->read() && !flag){
+        			Drive(3,50);
+        		}else{
+        			Drive(3,0);
+        			kikou &= 0xffdf;
+        		}
+        	}
+        	if(kikou & 64){//ペットボトル機構をもどす
+        		if(!Limit[4]->read()){
+        			Drive(3,-50);
+        		}else{
+        			Drive(3,0);
+        			kikou &= 0xffbf;
+        		}
+        	}
+        	if(kikou & 128){//つかむ
+        		Solenoid[0]->write(1);
+        		kikou &= 0xff7f;
+        	}
+        	if(kikou & 256){//はなす
+        		Solenoid[1]->write(0);
+        		kikou &= 0xfeff;
+        	}
+        	if(kikou & 512){
+        		kikou &= 0xfdff;
+        	}
+        	if(kikou & 1024){
+        		kikou &= 0xfbff;
+        	}
+        	if(kikou & 2048){
+        		kikou &= 0xf7ff;
+        	}
+        	if(kikou & 4096){
+        		kikou &= 0xefff;
+        	}
+        	if(kikou & 8192){
+        		kikou &= 0xdfff;
+        	}
+        	if(kikou & 16384){
+        		kikou &= 0xbfff;
+        	}
+        	if(kikou & 32768){
+        		kikou &= 0x7fff;
         	}
         }
     }
