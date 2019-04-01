@@ -18,7 +18,7 @@
 #define PI_6  0.523598775598
 #define PI2_3 2.09439510239
 
-#define Kp 2.2//移動
+#define Kp 1.6//移動
 #define Ki 0.2
 #define Kd 0.001
 
@@ -27,7 +27,7 @@
 #define kd 0.00008
 
 #define AMAX 400.0
-#define VMAX 500.0
+#define VMAX 400.0
 
 const PinName PIN[][3] = {
     {PB_14,PB_13,PB_15},//入れ替えた
@@ -54,12 +54,12 @@ const PinName RotaryPin[6][2] = {
     {PC_5 ,PA_12}
 };
 
-const PinName OutPin[4] = {
-    PA_1,PA_0,PB_0,PB_6
+const PinName OutPin[5] = {
+    PA_1,PA_0,PB_0,PB_6,PC_0
 };
 
-const PinName InPin[7] = {
-	PC_0,PC_1,PC_4,PA_4,PH_1,PB_7,PC_7
+const PinName InPin[6] = {
+	PC_1,PC_4,PA_4,PH_1,PB_7,PC_7
 };
 
 InterruptIn event(PC_13);
@@ -69,8 +69,9 @@ DigitalOut led(PA_5);
 
 PwmOut* Moter[7][2];
 DigitalOut* Led[7];
-DigitalOut* Solenoid[4];
-DigitalIn* Limit[7];
+DigitalOut* Solenoid[5];
+DigitalIn* test[4];
+DigitalIn* Limit[6];
 RotaryInc* Speed[3];
 RotaryInc* Place[3];
 GY521 *gy;
@@ -112,6 +113,7 @@ void safe(){//言わずもがな止める
     autoY = false;
     autoT = false;
     kikou = 0;
+    limit = false;
 	flag = false;
 	kikoutimer.stop();
 	kikoutimer.reset();
@@ -125,7 +127,7 @@ void safe(){//言わずもがな止める
         Moter[i][1]->write(0);   
         Led[i]->write(0);
     }
-	for(int i = 0;i < 6;i++){
+	for(int i = 0;i < 4;i++){
 		Solenoid[i]->write(0);
 	}
 }
@@ -200,29 +202,29 @@ void getData(const std_msgs::Float32MultiArray &msgs){//メッセージ受信時
     		kikoutimer.reset();
     		Drive(3,0);
     		Drive(4,0);
-    		for(int i = 0;i < 6;i++){
+    		for(int i = 0;i < 4;i++){
     			Solenoid[i]->write(0);
     		}
     		break;
     	case -30:
     		safe();
     		break;
-    	case -31:
-    		if(Limit[2]->read() && Limit[3]->read()){
+    	case -31:/*
+    		if(Limit[1]->read() && Limit[2]->read()){
     			Drive(3,0);
     			drivef1 = false;
     		}else{
-    			drivef1 = true;
-    			Drive(3,-50);//ただただペットボトルを前に出す
-    		}
+    			drivef1 = true;*/
+    			Drive(3,-90);//ただただペットボトルを前に出す
+    		//}
     		break;
     	case -32:
-    		if(Limit[4]->read()){
+    		if(Limit[3]->read()){
     			Drive(3,0);
     			driveb1 = false;
     		}else{
     			driveb1 = true;
-    			Drive(3,50);//ただただペットボトルを戻す
+    			Drive(3,90);//ただただペットボトルを戻す
     		}
     		break;
     	case -33:
@@ -231,21 +233,21 @@ void getData(const std_msgs::Float32MultiArray &msgs){//メッセージ受信時
     		driveb1 = false;
     		break;
     	case -34:
-    		if(!Limit[5]->read()){
+    		if(!Limit[4]->read()){
     			Drive(4,0);
     			drivef2 = false;
     		}else{
-    			Drive(4,100);
+    			Drive(4,30);
     			drivef2  = true;
     			driveb2 = false;
     		}
     		break;
     	case -35:
-    		if(!Limit[6]->read()){
+    		if(!Limit[5]->read()){
     			Drive(4,0);
     			driveb2 = false;
     		}else{
-    			Drive(4,-70);
+    			Drive(4,-30);
     			driveb2 = true;
     			drivef2 = false;
     		}
@@ -294,6 +296,10 @@ void getData(const std_msgs::Float32MultiArray &msgs){//メッセージ受信時
         case 0://手動走行
             autotimer.stop();
             movePID = true;
+            if(limit)limit = false;
+            if(autoX)autoX = false;
+            if(autoY)autoY = false;
+            if(autoT)autoT = false;
         	if(drivebyms)drivebyms = false;
             if(automove)automove = false;
             if(!movePID)movePID = true;
@@ -323,6 +329,7 @@ void getData(const std_msgs::Float32MultiArray &msgs){//メッセージ受信時
         	Xe = msgs.data[3];
             x_error = 0;
         	autoX = true;
+        	limit = false;
         	if(automove){
         		stampX = now_t;
         	}else{
@@ -338,7 +345,7 @@ void getData(const std_msgs::Float32MultiArray &msgs){//メッセージ受信時
         	t[1] = msgs.data[1];
         	Ymax = msgs.data[2];
         	Ye = msgs.data[3];
-        	//limit = msgs.data[4];
+        	limit = msgs.data[4];
             y_error = 0;
         	autoY = true;
         	if(automove){
@@ -356,6 +363,7 @@ void getData(const std_msgs::Float32MultiArray &msgs){//メッセージ受信時
         	Theta = msgs.data[1];
             t_error = 0;
             autoT = true;
+            limit = false;
         	if(!automove){
         		automove = true;
                 prev_t = 0;
@@ -379,6 +387,7 @@ void getData(const std_msgs::Float32MultiArray &msgs){//メッセージ受信時
             diff_t = 0;
             stampX = 0;
             stampY = 0;
+            limit = false;
             automove = true;
             autoX = true;
             autoY = true;
@@ -433,20 +442,20 @@ int main(int argc,char **argv){
         Led[i] = new DigitalOut(PIN[i][2],0);
         Moter[i][0] = new PwmOut(PIN[i][0]);
         Moter[i][1] = new PwmOut(PIN[i][1]);
-        Moter[i][0]->period_us(2048);
-        Moter[i][1]->period_us(2048);
+        Moter[i][0]->period_us(64);//2048
+        Moter[i][1]->period_us(64);//2048
     }
     for(i = 0;i < 3;i++){
-        Place[i] = new RotaryInc(RotaryPin[i][0],RotaryPin[i][1],3);
+        //Place[i] = new RotaryInc(RotaryPin[i][0],RotaryPin[i][1],3);
         Speed[i] = new RotaryInc(RotaryPin[i+3][0],RotaryPin[i+3][1],3);
     }
-    for(i = 0;i < 5;i++){
+    for(i = 0;i < 4;i++){
     	Limit[i] = new DigitalIn(InPin[i],PullNone);
     }
+    Limit[4] = new DigitalIn(InPin[4],PullUp);
     Limit[5] = new DigitalIn(InPin[5],PullUp);
-    Limit[6] = new DigitalIn(InPin[6],PullUp);
-    for(i = 0;i < 4;i++){
-    	Solenoid[i] = new DigitalOut(OutPin[i],0);
+    for(i = 0;i < 5;i++){
+    	Solenoid[i] = new DigitalOut(OutPin[i],1);
     }
     event.rise(&trigger);
     Timer loop;
@@ -458,10 +467,13 @@ int main(int argc,char **argv){
             loop.reset();
         }
     }
+    for(i = 0;i < 5;i++){
+    	Solenoid[i]->write(0);
+    }
     led.write(0);
     for(i = 0;i<3;i++){
         Speed[i]->reset();
-        Place[i]->reset();
+        //Place[i]->reset();
     }
     GY521 gyro;
     gy = &gyro;
@@ -472,7 +484,7 @@ int main(int argc,char **argv){
         nh.spinOnce();
         gyro.updata();//Yaw軸取得
         Yaw = gyro.yaw;
-        if(loop.read_ms() > 25){//10msごとに通信して通信量の調節
+        if(loop.read_ms() > 200){//10msごとに通信して通信量の調節
             now.data[0] = X;//X本来はオドメトリを送る
             now.data[1] = Y;//Y
             now.data[2] = T;//T
@@ -480,34 +492,34 @@ int main(int argc,char **argv){
             now.data[4] = nowVx;//mm/s
             now.data[5] = nowVy;
             now.data[6] = nowVt;
-            now.data[7] = automove + ((Vx || Vy || Omega) << 1) + (autoX << 2) + (autoY << 3) + (autoT << 4) + (kikou << 5);
+            now.data[7] = automove + ((Vx || Vy || Omega) << 1) + (autoX << 2) + (autoY << 3) + (autoT << 4) + (limit << 5) + (kikou << 6);
             place.publish(&now);
             loop.reset();
         }
         Yaw *= 0.0174532925199432;//pi/180
         move();//モーターの状態を更新
-        for(i = 0;i<3;++i){
+        /*for(i = 0;i<3;++i){
             diff[i] = Place[i]->diff() / 256.0 / 2 * R;
             Pspeed[i] = Place[i]->getSpeed();
-        }//オドメトリ計算
-        X += -2.0/3.0*diff[0]*cos(Yaw) + 2.0/3.0*diff[1]*cos(Yaw-PI_3) + 2.0/3.0*diff[2]*cos(Yaw+PI_3);
-        Y += -2.0/3.0*diff[0]*sin(Yaw) + 2.0/3.0*diff[1]*sin(Yaw-PI_3) + 2.0/3.0*diff[2]*sin(Yaw+PI_3);
-        T +=  diff[0]*1/L3 + diff[1]*1/L3 + diff[2]*1/L3;
-        nowVx = -2.0/3.0*Pspeed[0]*cos(Yaw) + 2.0/3.0*Pspeed[1]*cos(Yaw-PI_3) + 2.0/3.0*Pspeed[2]*cos(Yaw+PI_3);
-        nowVy = -2.0/3.0*Pspeed[0]*sin(Yaw) + 2.0/3.0*Pspeed[1]*sin(Yaw-PI_3) + 2.0/3.0*Pspeed[2]*sin(Yaw+PI_3);
-        nowVt =  Pspeed[0]*1/L3 + Pspeed[1]*1/L3 + Pspeed[2]*1/L3;
+        }*///オドメトリ計算
+        //X += -2.0/3.0*diff[0]*cos(Yaw) + 2.0/3.0*diff[1]*cos(Yaw-PI_3) + 2.0/3.0*diff[2]*cos(Yaw+PI_3);
+        //Y += -2.0/3.0*diff[0]*sin(Yaw) + 2.0/3.0*diff[1]*sin(Yaw-PI_3) + 2.0/3.0*diff[2]*sin(Yaw+PI_3);
+        //T +=  diff[0]*1/L3 + diff[1]*1/L3 + diff[2]*1/L3;
+        //nowVx = -2.0/3.0*Pspeed[0]*cos(Yaw) + 2.0/3.0*Pspeed[1]*cos(Yaw-PI_3) + 2.0/3.0*Pspeed[2]*cos(Yaw+PI_3);
+        //nowVy = -2.0/3.0*Pspeed[0]*sin(Yaw) + 2.0/3.0*Pspeed[1]*sin(Yaw-PI_3) + 2.0/3.0*Pspeed[2]*sin(Yaw+PI_3);
+        //nowVt =  Pspeed[0]*1/L3 + Pspeed[1]*1/L3 + Pspeed[2]*1/L3;
         if(!kikou){
-            if(drivef1 && (Limit[2]->read() || Limit[3]->read())){
+            if(drivef1 && (Limit[1]->read() || Limit[2]->read())){
             	Drive(3,0);
             	drivef1 = false;
-            }else if(driveb1 && Limit[4]->read()){
+            }else if(driveb1 && Limit[3]->read()){
             	Drive(3,0);
             	driveb1 = false;
             }
-            if(drivef2 && !Limit[5]->read()){
+            if(drivef2 && !Limit[4]->read()){
             	Drive(4,0);
             	drivef2 = false;
-            }else if(driveb2 && !Limit[6]->read()){
+            }else if(driveb2 && !Limit[5]->read()){
             	Drive(4,0);
             	driveb2 = false;
             }
@@ -543,9 +555,15 @@ int main(int argc,char **argv){
             	if((now_t - stampY)< t[1]){//y方向
                 	Vy = Ymax/2.0*(1-cos(2.0*AMAX*(now_t - stampY)/Ymax));
                 	if(yok)yok = false;
-            	}else if((fabs(nowVy) < 30 && fabs(y_diff) < 5) || (limit && Limit[0]->read() && Limit[1]->read())){
-            		Vy = 0;
-            		autoY = false;
+            	}else if((fabs(nowVy) < 30 && fabs(y_diff) < 5)){
+            		if(limit && Limit[0]->read()){
+            			autoY = false;
+            		}else{
+            			Vy = 0;
+            			autoY = false;
+            		}
+            	}else if(limit && !Limit[0]->read()){
+            		Vy = 100;
             	}else{
                 	Vy = Kp*y_diff + Ki*y_error - Kd*nowVy;
                 	if(fabs(Vy) > fabs(Ymax)){
@@ -559,9 +577,9 @@ int main(int argc,char **argv){
 
             if(autoT || limit){
                 Omega = 200*t_diff + 0.2*t_error - 0.03*nowVt;
-                if(limit){
+                /*if(limit){
                 	Omega = Omega + Limit[0]->read() * 50 - Limit[1]->read() * 50;
-                }
+                }*/
                 if(Omega > 200)Omega = 200;
                 else if(Omega < -200)Omega = -200;
                 else t_error += t_diff * diff_t;
@@ -571,36 +589,38 @@ int main(int argc,char **argv){
                 }
             }
 
-            if(!autoT && !autoX && !autoY){
-            	if(limit){
-            		if(Limit[0]->read() && Limit[1]->read()){
-            			limit = false;
-            			automove = false;
-            		}
-            	}else{
-            		automove = false;
-            	}
+        	if(limit){
+        		if(Limit[0]->read()){
+        			limit = false;
+        			automove = false;
+        			autoX = false;
+        			autoY = false;
+        			autoT = false;
+        			Vx = 0;
+        			Vy = 0;
+        			Omega = 0;
+        		}
+        	}else if(!autoT && !autoX && !autoY){
+            	automove = false;
             }
         }else if(kikou){
         	if(kikou & 1){//ペットボトルを取る
-        		if(!Limit[2]->read() && !Limit[3]->read() && !flag){
+        		if(!Limit[1]->read() && !Limit[2]->read() && !flag){
         			Solenoid[0]->write(0);
-        			Drive(3,-50);
+        			Drive(3,-100);
         		}else if(!flag){
         			Drive(3,0);
         			Solenoid[0]->write(1);
         			kikoutimer.reset();
         			kikoutimer.start();
         			flag = true;
-        		}else if(flag && !Limit[4]->read()){
+        		}else if(flag && !Limit[3]->read()){
         			if(kikoutimer.read() > 0.2){
-            			Drive(3,50);
+            			Drive(3,100);
         			}
         		}else if(flag){
         			Drive(3,0);
         			kikoutimer.reset();
-        			while(kikoutimer.read() < 0.2);
-        			Solenoid[0]->write(0);
         			flag = false;
         			kikou &= 0xfffe;
         			kikoutimer.stop();
@@ -609,9 +629,12 @@ int main(int argc,char **argv){
         	}
         	if(kikou & 2){//ペットボトルを置く
         		if(!flag){
-        			Solenoid[1]->write(1);
+        			Solenoid[0]->write(0);
         			kikoutimer.reset();
         			kikoutimer.start();
+        			while(kikoutimer.read() < 0.2);
+        			Solenoid[1]->write(1);
+        			kikoutimer.reset();
         			flag = true;
         		}else if(flag && kikoutimer.read() > 4.0){
         			Solenoid[1]->write(0);
@@ -622,8 +645,8 @@ int main(int argc,char **argv){
         		}
         	}
         	if(kikou & 4){//食事を取る,下ろす
-        		if(Limit[5]->read()){
-        			Drive(4,100);
+        		if(Limit[4]->read()){
+        			Drive(4,30);
         			Solenoid[2]->write(0);
         		}else{
         			Drive(4,0);
@@ -636,9 +659,9 @@ int main(int argc,char **argv){
         			flag = true;
         			kikoutimer.reset();
         			kikoutimer.start();
-        		}else if(flag && Limit[6]->read()){
+        		}else if(flag && Limit[5]->read()){
         			if(kikoutimer.read() > 0.5){
-        				Drive(4,-70);
+        				Drive(4,-30);
         			}
           		}else if(flag){
           			Drive(4,0);
@@ -653,21 +676,26 @@ int main(int argc,char **argv){
         	}
         	if(kikou & 16){//食事を投げる
         		if(!flag){
+        			Solenoid[4]->write(0);
         			Solenoid[3]->write(1);
         			flag = true;
         			kikoutimer.reset();
         			kikoutimer.start();
         		}else if(flag && kikoutimer.read() > 2.0){
         			Solenoid[3]->write(0);
+        			Solenoid[4]->write(1);
         			flag = false;
+        			kikoutimer.reset();
+        			while(kikoutimer.read() < 0.5);
+        			Solenoid[4]->write(0);
         			kikoutimer.stop();
         			kikoutimer.reset();
         			kikou &= 0xffef;
         		}
         	}
         	if(kikou & 32){//ペットボトル機構を前に出す
-        		if(!Limit[2]->read() && !Limit[3]->read() && !flag){
-        			Drive(3,-50);
+        		if(!Limit[1]->read() && !Limit[2]->read() && !flag){
+        			Drive(3,-100);
         		}else if(!flag){
         			Drive(3,0);
         			kikoutimer.reset();
@@ -682,15 +710,14 @@ int main(int argc,char **argv){
         		}
         	}
         	if(kikou & 64){//ペットボトル機構をもどす
-        		if(!Limit[4]->read() && !flag){
-        			Drive(3,50);
+        		if(!Limit[3]->read() && !flag){
+        			Drive(3,100);
         		}else if(!flag){
         			Drive(3,0);
         			kikoutimer.reset();
         			kikoutimer.start();
         			flag = true;
         		}else if(flag && kikoutimer.read() > 0.5){
-        			Solenoid[0]->write(0);
         			kikoutimer.stop();
         			kikoutimer.reset();
         			flag = false;

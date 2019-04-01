@@ -63,9 +63,9 @@ void GY521::updata(){
     yaw += diffyaw;
     gyro_z_prev = gyro_z_now;
     //temp = (double)gyroRead2(TEMPERATURE)/340+36.53;
-    if (yaw > 180) {
+    if (yaw > 225) {
         yaw -= 360;
-    } else if (yaw <= -180) {
+    } else if (yaw <= -225) {
         yaw += 360;
     }
 }
